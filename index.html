@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0e14" />
+    <title>Cyber Game</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0b0e14;
+        overflow: hidden;
+        /* Stop the browser from scrolling or zooming while you drag the joystick. */
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      #game { width: 100%; height: 100%; }
+      #rotate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 12px;
+        background: #0b0e14;
+        color: #5ff0ff;
+        font: 600 18px/1.4 system-ui, sans-serif;
+        text-align: center;
+        padding: 24px;
+      }
+      #rotate span { font-size: 48px; }
+      /* Phones held upright: ask to rotate (the game is landscape). */
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate { display: flex; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="rotate"><span>⟳</span>Rotate your phone to landscape</div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
