@@ -3,8 +3,7 @@ import { DORM } from '../data/dorm.js';
 import { makeWalkableCheck, translatePolygon, centerY } from '../systems/geometry.js';
 import { Joystick } from '../systems/Joystick.js';
 import { Player, createPlayerAnimations } from '../systems/Player.js';
-
-const DEBUG = new URLSearchParams(window.location.search).has('debug');
+import { DEBUG } from '../systems/debug.js';
 
 export class DormScene extends Phaser.Scene {
   constructor() {

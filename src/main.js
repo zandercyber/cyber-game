@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { DormScene } from './scenes/DormScene.js';
 import { WORLD } from './data/dorm.js';
+import { DEBUG } from './systems/debug.js';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -17,7 +18,7 @@ const game = new Phaser.Game({
   scene: [DormScene],
 });
 
-// With ?debug in the URL, expose the game for testing from the browser console.
-if (new URLSearchParams(window.location.search).has('debug')) {
+// In debug mode, expose the game for testing from the browser console.
+if (DEBUG) {
   window.__CYBER_GAME__ = game;
 }

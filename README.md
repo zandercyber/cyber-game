@@ -26,7 +26,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` to the URL to see the walkable floor (green), blocked areas (red) and the player's feet (yellow dot).
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red) and the player's feet (yellow dot).
 
 ## Project structure
 

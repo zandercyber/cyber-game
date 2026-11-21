@@ -18,7 +18,13 @@
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
-      #game { width: 100%; height: 100%; }
+      /* Keep the game clear of phone notches and app bars. */
+      #game {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
       #rotate {
         display: none;
         position: fixed;
