@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { DORM } from '../data/dorm.js';
-import { makeWalkableCheck, translatePolygon, centerY } from '../systems/geometry.js';
+import { makeWalkableCheck, translatePolygon, centerY, pointInPolygon } from '../systems/geometry.js';
 import { Joystick } from '../systems/Joystick.js';
 import { Player, createPlayerAnimations } from '../systems/Player.js';
 import { DEBUG } from '../systems/debug.js';
@@ -25,22 +25,21 @@ export class DormScene extends Phaser.Scene {
     // Pixel art stays crisp when scaled up; the painted room stays smooth.
     this.textures.get('player').setFilter(Phaser.Textures.FilterMode.NEAREST);
 
-    // Stations: drawn in depth order so the player can walk in front of or behind them.
-    const stationFootprints = DORM.stations.map((station) => {
-      const footprint = translatePolygon(station.footprint, station.x, station.y);
-      this.add.image(station.x, station.y, station.texture)
-        .setOrigin(0.5, 1)
-        .setDepth(centerY(footprint));
-      return footprint;
-    });
-
-    const blocked = [...Object.values(DORM.obstacles), ...stationFootprints];
-    const isWalkable = makeWalkableCheck(DORM.floor, blocked);
+    // Everything feet can't enter. Placing a station adds its footprint here,
+    // and the walk check below always reads the current list.
+    this.blocked = [...Object.values(DORM.obstacles)];
+    const isWalkable = makeWalkableCheck(DORM.floor, this.blocked);
 
     createPlayerAnimations(this);
     const start = DORM.playerStart;
     this.player = new Player(this, start.x, start.y, isWalkable, start.facing);
-    this.navGrid = buildGrid((x, y) => this.player.canStandAt(x, y), this.scale.width, this.scale.height);
+
+    // The room starts empty; stations get added as you unlock them.
+    this.placedStations = new Map();
+    for (const station of DORM.stations) {
+      if (station.startOwned) this.placeStation(station.id);
+    }
+    this.rebuildNavigation();
 
     this.keys = this.input.keyboard.addKeys({
       w: 'W', a: 'A', s: 'S', d: 'D',
@@ -56,7 +55,32 @@ export class DormScene extends Phaser.Scene {
 
     this.addHint();
     this.addFullscreenButton();
-    if (DEBUG) this.drawDebug(blocked);
+    if (DEBUG) this.setupDebug();
+  }
+
+  /**
+   * Adds a station to the room: its sprite, plus its footprint as a blocked area.
+   * Returns false if it's already placed or the player is standing in the way.
+   */
+  placeStation(id) {
+    const station = DORM.stations.find((s) => s.id === id);
+    if (!station || this.placedStations.has(id)) return false;
+    const footprint = translatePolygon(station.footprint, station.x, station.y);
+    if (this.player && pointInPolygon(this.player.x, this.player.y, footprint)) return false;
+
+    // Drawn in depth order so the player can walk in front of or behind it.
+    const sprite = this.add.image(station.x, station.y, station.texture)
+      .setOrigin(0.5, 1)
+      .setDepth(centerY(footprint));
+    this.blocked.push(footprint);
+    this.placedStations.set(id, { sprite, footprint });
+    return true;
+  }
+
+  // Tap-to-move pathfinding needs to know about newly placed stations.
+  rebuildNavigation() {
+    this.navGrid = buildGrid((x, y) => this.player.canStandAt(x, y), this.scale.width, this.scale.height);
+    if (DEBUG) this.drawDebug();
   }
 
   update(_time, delta) {
@@ -154,13 +178,33 @@ export class DormScene extends Phaser.Scene {
     });
   }
 
-  // Open the game with ?debug to see walkable floor (green), blocked shapes (red) and your feet.
-  drawDebug(blocked) {
-    const g = this.add.graphics().setDepth(15000);
-    g.lineStyle(3, 0x00ff66, 0.9);
-    g.strokePoints(DORM.floor.map(([x, y]) => ({ x, y })), true);
-    g.lineStyle(2, 0xff3355, 0.9);
-    for (const shape of blocked) g.strokePoints(shape.map(([x, y]) => ({ x, y })), true);
+  // Debug mode (?debug or #debug):
+  // green = walkable floor, red = blocked, faint orange = future station spots,
+  // yellow dot = your feet. Press B to place every station (for testing).
+  setupDebug() {
+    this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
+    this.input.keyboard.on('keydown-B', () => {
+      let placed = false;
+      for (const station of DORM.stations) placed = this.placeStation(station.id) || placed;
+      if (placed) this.rebuildNavigation();
+    });
+    this.drawDebug();
+  }
+
+  drawDebug() {
+    const g = this.debugGfx;
+    if (!g) return;
+    const pts = (shape) => shape.map(([x, y]) => ({ x, y }));
+    g.clear();
+    g.lineStyle(3, 0x00ff66, 0.9);
+    g.strokePoints(pts(DORM.floor), true);
+    g.lineStyle(2, 0xff3355, 0.9);
+    for (const shape of this.blocked) g.strokePoints(pts(shape), true);
+    g.lineStyle(2, 0xffa040, 0.45);
+    for (const station of DORM.stations) {
+      if (this.placedStations.has(station.id)) continue;
+      g.strokePoints(pts(translatePolygon(station.footprint, station.x, station.y)), true);
+    }
   }
 }

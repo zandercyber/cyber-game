@@ -19,4 +19,5 @@
 - Defense events pop up; unfixed systems go down for a while.
 - Real cybersecurity terms and tools.
 - Hires: AI agents and pen testers.
+- The dorm starts empty. Stations (`startOwned: false`) get added with `placeStation(id)` + `rebuildNavigation()` when unlocked.
 - Prestige comes later. Finish the dorm section first.

@@ -4,7 +4,7 @@ A tycoon-style cybersecurity simulator for the browser. Start in your dorm room,
 
 ## Status
 
-Movement prototype: walk around the dorm room. No gameplay yet.
+Movement prototype: walk around an empty dorm room. Stations (desks, PCs, server rack) are built but start locked; buying them comes next.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 
@@ -28,7 +28,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red) and the player's feet (yellow dot).
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), future station spots (faint orange) and the player's feet (yellow dot). In debug mode, press **B** to place every station.
 
 ## Project structure
 
