@@ -27,21 +27,25 @@ export const DORM = {
 
   // Stations are separate sprites so they can be bought, upgraded and walked behind.
   // x/y is the bottom-center of the image; footprint is relative to that point.
+  // startOwned: false means the room starts without it; it gets placed when unlocked.
   stations: [
     {
       id: 'laptop-desk',
+      startOwned: false,
       texture: 'station-laptop-desk',
       x: 560, y: 560,
       footprint: [[-68, -40], [-68, -70], [70, -70], [70, -21], [37, -5], [-23, -15]],
     },
     {
       id: 'dual-monitor-desk',
+      startOwned: false,
       texture: 'station-dual-monitor-desk',
       x: 760, y: 500,
       footprint: [[-105, -38], [-105, -92], [104, -92], [104, -70], [69, -12], [-41, -4]],
     },
     {
       id: 'server-rack',
+      startOwned: false,
       texture: 'station-server-rack',
       x: 1080, y: 620,
       footprint: [[-83, -42], [-83, -71], [82, -71], [82, -51], [70, -43], [-8, -4], [-71, -35]],
