@@ -1,16 +1,17 @@
 // Layout data for Prestige 1: the dorm room.
 // All coordinates are in world pixels, matching the 1376x768 room image.
-// Tip: open the game with ?debug in the URL to see these shapes drawn on screen.
+// Tip: open the game with ?debug or #debug to see these shapes drawn on screen.
 
 export const WORLD = { width: 1376, height: 768 };
 
 export const DORM = {
   background: 'room-dorm',
 
-  // Where the player's feet are allowed to go (the carpet).
+  // Where the player's feet are allowed to go (the carpet), kept a little
+  // inside the screen edges so the character never walks off-screen.
   floor: [
-    [62, 500], [300, 378], [545, 345], [860, 345],
-    [1105, 395], [1300, 538], [930, 762], [550, 762],
+    [35, 514], [300, 378], [545, 345], [860, 345],
+    [1105, 395], [1340, 531], [1340, 755], [35, 755],
   ],
 
   // Furniture that's painted into the background. Feet can't enter these.
@@ -25,32 +26,24 @@ export const DORM = {
     plant: [[1285, 490], [1340, 490], [1340, 545], [1285, 545]],
   },
 
-  // Stations are separate sprites so they can be bought, upgraded and walked behind.
-  // x/y is the bottom-center of the image; footprint is relative to that point.
-  // startOwned: false means the room starts without it; it gets placed when unlocked.
-  stations: [
-    {
-      id: 'laptop-desk',
-      startOwned: false,
-      texture: 'station-laptop-desk',
-      x: 560, y: 560,
-      footprint: [[-68, -40], [-68, -70], [70, -70], [70, -21], [37, -5], [-23, -15]],
-    },
-    {
-      id: 'dual-monitor-desk',
-      startOwned: false,
-      texture: 'station-dual-monitor-desk',
-      x: 760, y: 500,
-      footprint: [[-105, -38], [-105, -92], [104, -92], [104, -70], [69, -12], [-41, -4]],
-    },
-    {
-      id: 'server-rack',
-      startOwned: false,
-      texture: 'station-server-rack',
-      x: 1080, y: 620,
-      footprint: [[-83, -42], [-83, -71], [82, -71], [82, -51], [70, -43], [-8, -4], [-71, -35]],
-    },
+  // Empty spots where bought items get installed. x/y is the center of the plot.
+  plots: [
+    { id: 'plot-1', x: 600, y: 500 },
+    { id: 'plot-2', x: 980, y: 545 },
+    { id: 'plot-3', x: 300, y: 640 },
+    { id: 'plot-4', x: 700, y: 680 },
+    { id: 'plot-5', x: 1150, y: 680 },
   ],
+  plotSize: { width: 230, height: 115 },
 
-  playerStart: { x: 700, y: 660, facing: 'down' },
+  // The laundry basket by the bed is where cash gets stashed.
+  stash: { x: 95, y: 495, reach: 110, labelX: 125, labelY: 400 },
+
+  // The corner desk is the free starter workstation: hustles and the shop screen.
+  starterDesk: { x: 990, y: 415, reach: 95, labelY: 250 },
+
+  // Deliveries show up here, just inside the door.
+  deliverySpot: { x: 812, y: 395 },
+
+  playerStart: { x: 760, y: 600, facing: 'down' },
 };
