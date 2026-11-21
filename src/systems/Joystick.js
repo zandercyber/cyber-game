@@ -9,11 +9,12 @@ const TAP_MAX_MOVE = 14; // world px the finger can wander and still count as a 
 const TAP_MAX_MS = 350;
 
 export class Joystick {
-  constructor(scene, { radius = 90, deadZone = 0.15, onTap = null } = {}) {
+  constructor(scene, { radius = 90, deadZone = 0.15, onTap = null, isBlocked = () => false } = {}) {
     this.scene = scene;
     this.radius = radius;
     this.deadZone = deadZone;
     this.onTap = onTap;
+    this.isBlocked = isBlocked; // e.g. the pointer is on a HUD button
     this.pointerId = null;
     this.vector = { x: 0, y: 0 };
 
@@ -38,7 +39,7 @@ export class Joystick {
 
   onDown(pointer, currentlyOver) {
     // Ignore taps on buttons (anything interactive under the pointer).
-    if (this.active || (currentlyOver && currentlyOver.length > 0)) return;
+    if (this.active || (currentlyOver && currentlyOver.length > 0) || this.isBlocked(pointer)) return;
     this.pointerId = pointer.id;
     this.downAt = this.scene.time.now;
     this.maxDrag = 0;

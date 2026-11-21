@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { DormScene } from './scenes/DormScene.js';
+import { UIScene } from './scenes/UIScene.js';
 import { WORLD } from './data/dorm.js';
 import { DEBUG } from './systems/debug.js';
 
@@ -15,7 +16,7 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   input: { activePointers: 2 },
-  scene: [DormScene],
+  scene: [DormScene, UIScene],
 });
 
 // In debug mode, expose the game for testing from the browser console.

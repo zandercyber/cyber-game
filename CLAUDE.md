@@ -19,5 +19,10 @@
 - Defense events pop up; unfixed systems go down for a while.
 - Real cybersecurity terms and tools.
 - Hires: AI agents and pen testers.
-- The dorm starts empty. Stations (`startOwned: false`) get added with `placeStation(id)` + `rebuildNavigation()` when unlocked.
+- Currency is cash only; cash counts once stashed in the laundry basket by the bed.
+- The dorm starts empty. The corner desk is the free starter workstation and the shop screen.
+- Items live in `src/data/catalog.js` (price, watts, delivery time, footprint). Install with `placeItem(itemId, plotId)`, remove with `removeItem(plotId)`, then call `rebuildNavigation()`.
+- Limits are POWER (upgradable power supply, meter in the HUD; over capacity trips the breaker) and HEAT (machines heat up with use and need a cooldown; fans attach to a machine to cool it).
+- Buying: order at the shop, box appears at the door after a delay (15s cheap to ~2min big), carry it to a plot. Shovel removes an item for 25% back.
+- Maintenance: servers crash and PCs need updates; the player repairs them. Energy drinks give a speed boost. The player should always be busy.
 - Prestige comes later. Finish the dorm section first.
