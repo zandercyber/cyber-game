@@ -9,7 +9,8 @@
 
 ## Art pipeline
 - Art comes from Gemini on a flat magenta (#FF00FF) background; Claude cuts it out, snaps pixel grids and scales it.
-- Player sheet `public/assets/player/zander.png`: 32x52 frames, 4 columns, drawn at 2x.
+- Art lives in `src/assets/` and is loaded with `asset('folder/file.png')` so builds hash file names (no stale browser caches).
+- Player sheet `src/assets/player/zander.png`: 32x52 frames, 4 columns, drawn at 2x.
   Rows: 0 idle (down, left, right, up), 1-4 walk down/left/right/up, 5-8 carry down/left/right/up, 9 work (back view).
 - Rooms are 1376x768 isometric-style images; world coordinates match image pixels.
 - Stations are separate sprites anchored at bottom-center with a floor `footprint` polygon (see `src/data/dorm.js`).

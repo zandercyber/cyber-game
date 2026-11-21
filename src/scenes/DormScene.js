@@ -7,6 +7,7 @@ import { Player, createPlayerAnimations } from '../systems/Player.js';
 import { DEBUG } from '../systems/debug.js';
 import { buildGrid, findPath } from '../systems/pathfinding.js';
 import { gameState } from '../state/GameState.js';
+import { asset } from '../systems/assets.js';
 
 const ACCENT = 0x5ff0ff;
 
@@ -16,10 +17,10 @@ export class DormScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image(DORM.background, 'assets/rooms/dorm.jpg');
-    this.load.spritesheet('player', 'assets/player/zander.png', { frameWidth: 32, frameHeight: 52 });
-    for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, item.file);
-    for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, file);
+    this.load.image(DORM.background, asset('rooms/dorm.jpg'));
+    this.load.spritesheet('player', asset('player/zander.png'), { frameWidth: 32, frameHeight: 52 });
+    for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, asset(item.file));
+    for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, asset(file));
   }
 
   create() {
