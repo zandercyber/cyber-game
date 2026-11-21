@@ -4,6 +4,7 @@ import { makeWalkableCheck, translatePolygon, centerY } from '../systems/geometr
 import { Joystick } from '../systems/Joystick.js';
 import { Player, createPlayerAnimations } from '../systems/Player.js';
 import { DEBUG } from '../systems/debug.js';
+import { buildGrid, findPath } from '../systems/pathfinding.js';
 
 export class DormScene extends Phaser.Scene {
   constructor() {
@@ -39,12 +40,19 @@ export class DormScene extends Phaser.Scene {
     createPlayerAnimations(this);
     const start = DORM.playerStart;
     this.player = new Player(this, start.x, start.y, isWalkable, start.facing);
+    this.navGrid = buildGrid((x, y) => this.player.canStandAt(x, y), this.scale.width, this.scale.height);
 
     this.keys = this.input.keyboard.addKeys({
       w: 'W', a: 'A', s: 'S', d: 'D',
       up: 'UP', left: 'LEFT', down: 'DOWN', right: 'RIGHT',
     });
-    this.joystick = new Joystick(this);
+    this.joystick = new Joystick(this, { onTap: (x, y) => this.setMoveTarget(x, y) });
+    this.moveTarget = null;
+    // Floor ring that marks where a tap sent you.
+    this.targetMarker = this.add.ellipse(0, 0, 40, 20)
+      .setStrokeStyle(3, 0x5ff0ff, 0.9)
+      .setDepth(-5000)
+      .setVisible(false);
 
     this.addHint();
     this.addFullscreenButton();
@@ -53,7 +61,9 @@ export class DormScene extends Phaser.Scene {
 
   update(_time, delta) {
     const dt = Math.min(delta, 50) / 1000; // cap so a lag spike can't teleport you through walls
-    const input = this.readInput();
+    let input = this.readInput();
+    if (input.x !== 0 || input.y !== 0) this.clearMoveTarget(); // manual control wins
+    else if (this.moveTarget) input = this.steerToTarget(dt);
     this.player.update(dt, input);
 
     if (this.hint && (input.x !== 0 || input.y !== 0)) {
@@ -62,6 +72,49 @@ export class DormScene extends Phaser.Scene {
       this.tweens.add({ targets: hint, alpha: 0, duration: 600, onComplete: () => hint.destroy() });
     }
     if (this.debugFeet) this.debugFeet.setPosition(this.player.x, this.player.y);
+  }
+
+  setMoveTarget(x, y) {
+    const path = findPath(this.navGrid, this.player.x, this.player.y, x, y);
+    if (!path || path.length === 0) return;
+    const end = path[path.length - 1];
+    this.moveTarget = { path, x: path[0].x, y: path[0].y, best: Infinity, stuckFor: 0 };
+    this.targetMarker.setPosition(end.x, end.y).setVisible(true).setAlpha(1);
+  }
+
+  clearMoveTarget() {
+    if (!this.moveTarget) return;
+    this.moveTarget = null;
+    this.targetMarker.setVisible(false);
+  }
+
+  // Follow the path's waypoints to the tapped spot. Stop on arrival, or if
+  // something keeps us from getting any closer for a moment.
+  steerToTarget(dt) {
+    const t = this.moveTarget;
+    const dx = t.x - this.player.x;
+    const dy = t.y - this.player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 6) {
+      t.path.shift();
+      if (t.path.length === 0) {
+        this.clearMoveTarget();
+        return { x: 0, y: 0 };
+      }
+      Object.assign(t, { x: t.path[0].x, y: t.path[0].y, best: Infinity, stuckFor: 0 });
+      return this.steerToTarget(dt);
+    }
+    if (dist < t.best - 1) {
+      t.best = dist;
+      t.stuckFor = 0;
+    } else {
+      t.stuckFor += dt;
+      if (t.stuckFor > 0.35) {
+        this.clearMoveTarget();
+        return { x: 0, y: 0 };
+      }
+    }
+    return { x: dx / dist, y: dy / dist };
   }
 
   readInput() {
@@ -74,7 +127,9 @@ export class DormScene extends Phaser.Scene {
 
   addHint() {
     const touch = this.sys.game.device.input.touch;
-    const text = touch ? 'Drag anywhere to move' : 'Move: WASD / arrow keys, or click and drag';
+    const text = touch
+      ? 'Tap where to go, or drag to steer'
+      : 'Move: WASD / arrow keys, click where to go, or click and drag';
     this.hint = this.add.text(this.scale.width / 2, 40, text, {
       fontFamily: 'system-ui, sans-serif',
       fontSize: '26px',

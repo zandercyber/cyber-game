@@ -13,8 +13,10 @@ Movement prototype: walk around the dorm room. No gameplay yet.
 | Device | Move |
 | --- | --- |
 | Keyboard | WASD or arrow keys |
-| Mouse | Click and drag anywhere |
-| Phone | Touch and drag anywhere (landscape) |
+| Mouse | Click where to go, or click and drag to steer |
+| Phone (landscape) | Tap where to go, or touch and drag to steer |
+
+Tap/click-to-move finds a path around furniture.
 
 ## Run locally
 
@@ -35,7 +37,7 @@ public/assets/   art: room backgrounds, stations, player sprite sheet
 src/main.js      game setup (size, scaling, scenes)
 src/scenes/      one scene per room (DormScene)
 src/data/        room layouts: floor shape, obstacles, station positions
-src/systems/     player movement, joystick, collision helpers
+src/systems/     player movement, joystick, collision and pathfinding
 ```
 
 ## Tech
