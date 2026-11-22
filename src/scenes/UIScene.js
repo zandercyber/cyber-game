@@ -5,6 +5,7 @@ import { AUGUSTUS_UPGRADES } from '../data/augustus.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
 import { ShopPanel } from '../ui/ShopPanel.js';
+import { QuestionPanel } from '../ui/QuestionPanel.js';
 
 const PANEL_BG = 0x0b0e14;
 const ACCENT = '#5ff0ff';
@@ -71,6 +72,16 @@ export class UIScene extends Phaser.Scene {
         this.renderDeliveryChip();
       },
     });
+    // Security questions while you work.
+    this.questionPanel = new QuestionPanel(this, { onAnswer: (pick) => this.dorm.answerQuestion(pick) });
+    const onQuestion = (question) => this.questionPanel.show(question);
+    this.dorm.events.on('question', onQuestion);
+    const onKey = (event) => this.questionPanel.key(event);
+    this.input.keyboard.on('keydown', onKey);
+    // A new tap on the card (after answering) closes it. pointerdown, so the tap
+    // that picked the answer doesn't also close it.
+    this.input.on('pointerdown', (pointer) => this.questionPanel.tap(pointer));
+
     const onUnlock = () => this.showBanner('Shop unlocked!', 'Your laptop now sells gear. Walk over to shop.');
     gameState.on('shop-unlocked', onUnlock);
     const onTrip = ({ again, fried, used, capacity }) => {
@@ -103,6 +114,8 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('power-installed', onPower);
       this.dorm.events.off('augustus-arrived', onArrive);
       this.dorm.events.off('augustus-upgraded', onUpgrade);
+      this.dorm.events.off('question', onQuestion);
+      this.input.keyboard.off('keydown', onKey);
     });
   }
 
@@ -143,7 +156,7 @@ export class UIScene extends Phaser.Scene {
 
   /** True if the pointer is on a HUD button, so the room ignores that tap. */
   isOverButton(pointer) {
-    if (this.shop?.contains(pointer)) return true;
+    if (this.shop?.contains(pointer) || this.questionPanel?.contains(pointer)) return true;
     return (this.buttons ?? []).some((b) => b.visible && b.getBounds().contains(pointer.x, pointer.y));
   }
 
@@ -226,6 +239,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   update() {
+    this.questionPanel.update();
     const plot = this.dorm.shovelTarget?.() ?? null;
     if (plot !== this.shovelPlot) {
       this.shovelPlot = plot;

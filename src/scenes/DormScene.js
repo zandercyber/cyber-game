@@ -17,6 +17,7 @@ import {
 import { readSave, writeSave } from '../state/save.js';
 import { Augustus } from '../systems/Augustus.js';
 import { AUGUSTUS, AUGUSTUS_UPGRADES, MAX_LEVEL, noLevels } from '../data/augustus.js';
+import { QUESTIONS, QUESTION_CHANCE, QUESTION_GROUPS, groupForJobs } from '../data/questions.js';
 
 const ACCENT = 0x5ff0ff;
 const FONT = 'system-ui, sans-serif';
@@ -75,6 +76,7 @@ export class DormScene extends Phaser.Scene {
         hustles: HELPDESK_JOBS,
         heat: HEAT.starterDesk,
         pileMax: STARTER_DESK_PILE_MAX,
+        group: 'helpdesk',
       }),
     });
 
@@ -119,6 +121,11 @@ export class DormScene extends Phaser.Scene {
     // The laptop becomes the shop once you've stashed enough cash.
     gameState.on('cash', this.checkShopUnlock, this);
     this.events.once('shutdown', () => gameState.off('cash', this.checkShopUnlock, this));
+
+    // Security questions: the one on screen, and which ones you've seen (no repeats).
+    this.question = null;
+    this.questionChance = QUESTION_CHANCE;
+    this.questionsSeen = Object.fromEntries(Object.keys(QUESTIONS).map((g) => [g, []]));
 
     // AI agent helpers (Augustus for now). A list, so more can join later.
     this.agents = [];
@@ -194,6 +201,7 @@ export class DormScene extends Phaser.Scene {
       idle: earns.mode === 'idle',
       payMultiplier: earns.payMultiplier,
       sprite: plot.sprite,
+      group: groupForJobs(earns.jobs),
     });
     // You stand in front of the machine (below it on screen) to work or collect.
     const spot = { x: plot.x, y: plot.y + 72, reach: earns.mode === 'idle' ? 110 : 80 };
@@ -260,6 +268,54 @@ export class DormScene extends Phaser.Scene {
     if (ownsEarner || machineComing) return false;
     const cheapest = Math.min(...Object.values(ITEMS).filter((i) => i.earns).map((i) => i.price));
     return gameState.cash + this.carried < cheapest;
+  }
+
+  // ---------- Security questions ----------
+
+  /**
+   * Called by a machine when you finish a job there. About 1 in 5 times it
+   * opens a question (true) and the job waits for your answer.
+   */
+  askQuestion(station) {
+    if (this.question || Math.random() >= this.questionChance) return false;
+    const group = station.hustle?.group ?? station.group;
+    const bank = QUESTIONS[group];
+    if (!bank?.length) return false;
+    // No repeats until you've seen every question in the group.
+    let seen = this.questionsSeen[group];
+    if (seen.length >= bank.length) seen = this.questionsSeen[group] = [];
+    const unseen = bank.map((_, i) => i).filter((i) => !seen.includes(i));
+    const index = unseen[Math.floor(Math.random() * unseen.length)];
+    seen.push(index);
+    const item = bank[index];
+    // Shuffle the choices; remember where the right one landed.
+    const order = item.choices.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    this.question = {
+      hustle: station,
+      group,
+      groupName: QUESTION_GROUPS[group].name,
+      q: item.q,
+      choices: order.map((i) => item.choices[i]),
+      correct: order.indexOf(item.answer),
+      why: item.why,
+    };
+    this.events.emit('question', this.question);
+    return true;
+  }
+
+  /** The player's pick (index into the shown choices), or null when time ran out. */
+  answerQuestion(pick) {
+    const q = this.question;
+    if (!q) return null;
+    this.question = null;
+    const correct = pick === q.correct;
+    const stillThere = this.stations.some((st) => st.hustle === q.hustle);
+    const pay = stillThere ? q.hustle.resolveQuestion(correct) : 0;
+    return { correct, pay };
   }
 
   // ---------- Augustus (AI agent helpers) ----------
@@ -811,6 +867,7 @@ export class DormScene extends Phaser.Scene {
       boxes: this.boxes.map((b) => b.itemId),
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
       augustus: this.augustusState(),
+      questionsSeen: this.questionsSeen,
     });
   }
 
@@ -864,6 +921,7 @@ export class DormScene extends Phaser.Scene {
     this.player.facing = save.player?.facing ?? this.player.facing;
 
     if (save.tripped) this.trip({ silent: true });
+    this.questionsSeen = save.questionsSeen;
     if (save.augustus) {
       const a = save.augustus;
       this.augustusLevels = { ...a.levels };
@@ -1044,7 +1102,7 @@ export class DormScene extends Phaser.Scene {
   // ---------- Debug (?debug or #debug) ----------
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
-  // U unlock the shop, D deliver all orders now, G hire Augustus now.
+  // U unlock the shop, D deliver all orders now, G hire Augustus now, Q questions on every job.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1062,6 +1120,9 @@ export class DormScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-P', () => gameState.setPowerTier((gameState.powerTier + 1) % POWER_TIERS.length));
     this.input.keyboard.on('keydown-U', () => this.checkShopUnlock(Infinity));
     this.input.keyboard.on('keydown-D', () => { for (const o of this.orders) o.remaining = 0; });
+    this.input.keyboard.on('keydown-Q', () => { // every job you finish asks a question (Q again: back to normal)
+      this.questionChance = this.questionChance === 1 ? QUESTION_CHANCE : 1;
+    });
     this.input.keyboard.on('keydown-G', () => { // Augustus, free and right now
       if (!this.augustusHired && this.augustusArrival === null) this.augustusArrival = 0.1;
     });

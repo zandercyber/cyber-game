@@ -8,6 +8,8 @@ Prototype: work hustles at the corner desk and carry the cash to your stash (the
 
 Power is the limit. Every machine draws watts, including the laptop (60 W). Go over your power supply and the lights flicker, then the breaker trips: the room goes dark and machines stop (the laptop keeps going on its battery), and the surge **fries** a machine (two if you trip it again). Stand at the breaker panel to reset it, then stand at each fried machine to repair it.
 
+**Security checks:** about 1 in 5 jobs you finish yourself pops up a cybersecurity question that matches the machine (help desk, web bugs, or AI security). Right answer: double pay. Wrong or too slow (15 s): the job fails. Every answer shows a one-line explanation, and you won't see a repeat until you've seen the whole set.
+
 **Augustus**, an AI agent on a cloud, can be hired in the shop's **Upgrades** tab ($300). He works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. Upgrade his speed, profit boost and energy in the same tab. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
@@ -36,7 +38,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire Augustus now.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire Augustus now, **Q** a security question on every job.
 
 ## Project structure
 
@@ -48,6 +50,7 @@ src/data/        room layouts (floor, obstacles, plots) and the item catalog
 src/state/       shared game state: cash and power
 src/scenes/UIScene.js  HUD: cash, power meter, shovel, banners, fullscreen
 src/ui/ShopPanel.js    the shop screen (Gear and Upgrades tabs)
+src/ui/QuestionPanel.js  the security question card (questions in src/data/questions.js)
 src/systems/Augustus.js  the AI agent helper (data in src/data/augustus.js)
 src/systems/     player movement, joystick, collision and pathfinding
 ```

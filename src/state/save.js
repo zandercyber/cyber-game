@@ -7,6 +7,7 @@
 
 import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
 import { AUGUSTUS, MAX_LEVEL, UPGRADE_IDS, augustusStats } from '../data/augustus.js';
+import { QUESTIONS } from '../data/questions.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -100,6 +101,14 @@ export function readSave({ plotIds, pileMax }) {
     };
   }
 
+  // Questions already seen per group: unique whole numbers inside that group's bank.
+  const rawSeen = obj(raw.questionsSeen);
+  const questionsSeen = Object.fromEntries(Object.entries(QUESTIONS).map(([group, bank]) => {
+    const list = Array.isArray(rawSeen[group]) ? rawSeen[group] : [];
+    const ok = list.filter((i) => Number.isInteger(i) && i >= 0 && i < bank.length);
+    return [group, [...new Set(ok)]];
+  }));
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
@@ -114,6 +123,7 @@ export function readSave({ plotIds, pileMax }) {
     powerTier: int(raw.powerTier, 0, POWER_TIERS.length - 1),
     tripped: raw.tripped === true, // older saves don't have it: not tripped
     augustus,
+    questionsSeen,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {
