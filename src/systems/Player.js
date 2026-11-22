@@ -1,4 +1,5 @@
 // The player character: movement, collision and animation.
+// Modes: normal, carrying (arms out, cash stack shown), working (typing, back view).
 
 const SPEED = 240; // world pixels per second at full stick
 const SCALE = 2; // sprite sheet frames are 32x52; drawn at 2x
@@ -6,21 +7,25 @@ const FEET_ORIGIN_Y = 51 / 52; // feet sit on row 51 of each frame
 // Points around the feet that must all be on open floor (keeps the body off walls).
 const FEET_PROBES = [[-14, 0], [14, 0], [0, -8], [0, 4]];
 
-// Sprite sheet layout: 4 columns per row. See docs in the project spec.
-const ROWS = { idle: 0, walkDown: 1, walkLeft: 2, walkRight: 3, walkUp: 4 };
+// Sprite sheet layout: 4 columns per row (see CLAUDE.md).
+const WALK_ROWS = { down: 1, left: 2, right: 3, up: 4 };
+const CARRY_ROWS = { down: 5, left: 6, right: 7, up: 8 };
+const WORK_ROW = 9;
 const IDLE_FRAME = { down: 0, left: 1, right: 2, up: 3 };
+// Standing still while carrying: first frame of that direction's carry row.
+const CARRY_IDLE_FRAME = Object.fromEntries(Object.entries(CARRY_ROWS).map(([d, r]) => [d, r * 4]));
 
 export function createPlayerAnimations(scene) {
   const row = (r) => [0, 1, 2, 3].map((c) => r * 4 + c);
-  const walks = { down: ROWS.walkDown, left: ROWS.walkLeft, right: ROWS.walkRight, up: ROWS.walkUp };
-  for (const [dir, r] of Object.entries(walks)) {
-    scene.anims.create({
-      key: `walk-${dir}`,
-      frames: scene.anims.generateFrameNumbers('player', { frames: row(r) }),
-      frameRate: 8,
-      repeat: -1,
-    });
-  }
+  const make = (key, r, frameRate = 8) => scene.anims.create({
+    key,
+    frames: scene.anims.generateFrameNumbers('player', { frames: row(r) }),
+    frameRate,
+    repeat: -1,
+  });
+  for (const [dir, r] of Object.entries(WALK_ROWS)) make(`walk-${dir}`, r);
+  for (const [dir, r] of Object.entries(CARRY_ROWS)) make(`carry-${dir}`, r);
+  make('work', WORK_ROW, 6);
 }
 
 export class Player {
@@ -29,6 +34,8 @@ export class Player {
     this.isWalkable = isWalkable;
     this.facing = facing;
     this.moving = false;
+    this.working = false;
+    this.carrying = false;
     this.sprite = scene.add.sprite(x, y, 'player', IDLE_FRAME[facing])
       .setOrigin(0.5, FEET_ORIGIN_Y)
       .setScale(SCALE);
@@ -49,6 +56,7 @@ export class Player {
       this.stop();
       return;
     }
+    this.working = false;
 
     const step = SPEED * strength * dt;
     const dx = (input.x / Math.hypot(input.x, input.y)) * step;
@@ -58,7 +66,7 @@ export class Player {
 
     this.facing = this.pickFacing(input.x, input.y);
     this.sprite.anims.timeScale = Math.max(0.5, strength);
-    this.sprite.anims.play(`walk-${this.facing}`, true);
+    this.sprite.anims.play(`${this.carrying ? 'carry' : 'walk'}-${this.facing}`, true);
     this.moving = true;
     // Things lower on screen are closer to the camera, so they draw on top.
     this.sprite.setDepth(this.sprite.y);
@@ -89,8 +97,32 @@ export class Player {
   stop() {
     if (!this.moving) return;
     this.moving = false;
+    this.showIdle();
+  }
+
+  showIdle() {
+    if (this.working) return;
     this.sprite.anims.stop();
-    this.sprite.setFrame(IDLE_FRAME[this.facing]);
+    this.sprite.setFrame(this.carrying ? CARRY_IDLE_FRAME[this.facing] : IDLE_FRAME[this.facing]);
+  }
+
+  /** Typing at a desk (back to the camera). Turning it off returns to idle. */
+  setWorking(on) {
+    if (on === this.working) return;
+    this.working = on;
+    if (on) {
+      this.facing = 'up';
+      this.sprite.anims.timeScale = 1;
+      this.sprite.anims.play('work', true);
+    } else {
+      this.showIdle();
+    }
+  }
+
+  setCarrying(on) {
+    if (on === this.carrying) return;
+    this.carrying = on;
+    if (!this.moving) this.showIdle();
   }
 
   // Prefer the current facing on diagonals so the sprite doesn't flicker.

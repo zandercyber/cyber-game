@@ -17,14 +17,14 @@ class GameState extends Phaser.Events.EventEmitter {
 
   addCash(amount) {
     this.cash += amount;
-    this.emit('cash', this.cash);
+    this.emit('cash', this.cash, amount);
   }
 
   /** Spends cash if there's enough. Returns true on success. */
   spend(amount) {
     if (this.cash < amount) return false;
     this.cash -= amount;
-    this.emit('cash', this.cash);
+    this.emit('cash', this.cash, -amount);
     return true;
   }
 
