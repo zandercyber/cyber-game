@@ -10,7 +10,9 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **Security checks:** about 1 in 5 jobs you finish yourself pops up a cybersecurity question that matches the machine (help desk, web bugs, or AI security). Right answer: double pay. Wrong or too slow (15 s): the job fails. Every answer shows a one-line explanation, and you won't see a repeat until you've seen the whole set.
 
-**Augustus**, an AI agent on a cloud, can be hired in the shop's **Upgrades** tab ($300). He works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. Upgrade his speed, profit boost and energy in the same tab. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
+**Augustus**, an AI agent on a cloud, can be hired in the shop's **Upgrades** tab ($300). He works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. Upgrade his speed, profit boost and energy in the same tab.
+
+**Your upgrades** (also in the Upgrades tab): **carry limit** (you start holding up to $100; bigger piles take more than one trip) and **speed** (+10% per level). 5 levels each. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 

@@ -19,17 +19,17 @@ export const AUGUSTUS = {
 export const MAX_LEVEL = 5;
 export const AUGUSTUS_UPGRADES = {
   speed: {
-    name: 'Speed',
+    name: 'Augustus speed',
     prices: [100, 200, 400, 800, 1600],
     describe: (lvl) => `Floats and works ${15 * lvl}% faster`,
   },
   profit: {
-    name: 'Profit boost',
+    name: 'Augustus profit',
     prices: [150, 300, 600, 1200, 2400],
     describe: (lvl) => `+${15 * lvl}% pay on jobs he does`,
   },
   energy: {
-    name: 'Energy',
+    name: 'Augustus energy',
     prices: [100, 200, 400, 800, 1600],
     describe: (lvl) => `Awake ${AUGUSTUS.awakeSeconds + 30 * lvl}s between naps`,
   },
