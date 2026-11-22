@@ -1,10 +1,11 @@
 // Everything you can buy. Prices, watts and delivery times are first guesses
 // to tune once the money loop exists.
 
+// file: image path relative to src/assets.
 export const ITEMS = {
   'folding-laptop': {
     name: 'Old laptop + folding table',
-    file: 'assets/stations/folding-laptop.png',
+    file: 'stations/folding-laptop.png',
     price: 25,
     watts: 45,
     deliverySeconds: 15,
@@ -12,7 +13,7 @@ export const ITEMS = {
   },
   'laptop-desk': {
     name: 'Laptop desk',
-    file: 'assets/stations/laptop-desk.png',
+    file: 'stations/laptop-desk.png',
     price: 80,
     watts: 90,
     deliverySeconds: 25,
@@ -21,7 +22,7 @@ export const ITEMS = {
   },
   'dual-monitor-desk': {
     name: 'Dual-monitor workstation',
-    file: 'assets/stations/dual-monitor-desk.png',
+    file: 'stations/dual-monitor-desk.png',
     price: 250,
     watts: 350,
     deliverySeconds: 45,
@@ -29,7 +30,7 @@ export const ITEMS = {
   },
   'server-rack': {
     name: 'Server rack',
-    file: 'assets/stations/server-rack.png',
+    file: 'stations/server-rack.png',
     price: 900,
     watts: 900,
     deliverySeconds: 120,
@@ -48,14 +49,15 @@ export const POWER_TIERS = [
 ];
 
 // Small images used around the game (HUD icons, carried things, tools).
+// Paths are relative to src/assets.
 export const SMALL_IMAGES = {
-  'item-box': 'assets/items/box.png',
-  'item-cash': 'assets/items/cash.png',
-  'item-fan': 'assets/items/fan.png',
-  'item-power-strip': 'assets/items/power-strip.png',
-  'item-surge-protector': 'assets/items/surge-protector.png',
-  'item-ups': 'assets/items/ups.png',
-  'item-shovel': 'assets/items/shovel.png',
+  'item-box': 'items/box.png',
+  'item-cash': 'items/cash.png',
+  'item-fan': 'items/fan.png',
+  'item-power-strip': 'items/power-strip.png',
+  'item-surge-protector': 'items/surge-protector.png',
+  'item-ups': 'items/ups.png',
+  'item-shovel': 'items/shovel.png',
 };
 
 // Share of the price you get back when you shovel an item out of a plot.

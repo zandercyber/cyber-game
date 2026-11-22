@@ -33,7 +33,7 @@ Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked
 ## Project structure
 
 ```
-public/assets/   art: room backgrounds, stations, player sprite sheet
+src/assets/      art: room backgrounds, stations, items, player sprite sheet
 src/main.js      game setup (size, scaling, scenes)
 src/scenes/      one scene per room (DormScene)
 src/data/        room layouts (floor, obstacles, plots) and the item catalog
