@@ -8,6 +8,13 @@ class GameState extends Phaser.Events.EventEmitter {
     this.cash = 0; // only cash stashed in the hamper counts
     this.powerTier = 0;
     this.powerUsed = 0;
+    this.shopUnlocked = false; // the corner laptop turns into the shop at $100
+  }
+
+  unlockShop() {
+    if (this.shopUnlocked) return;
+    this.shopUnlocked = true;
+    this.emit('shop-unlocked');
   }
 
   get power() {

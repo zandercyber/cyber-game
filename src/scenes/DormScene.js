@@ -9,10 +9,17 @@ import { buildGrid, findPath } from '../systems/pathfinding.js';
 import { gameState } from '../state/GameState.js';
 import { asset } from '../systems/assets.js';
 import { HustleStation } from '../systems/HustleStation.js';
-import { STARTER_HUSTLES, STARTER_DESK_HEAT, STARTER_DESK_PILE_MAX } from '../data/hustles.js';
+import {
+  HELPDESK_JOBS, BOUNTY_JOBS, AGENT_JOBS, HEAT, STARTER_DESK_PILE_MAX, SHOP_UNLOCK_CASH,
+} from '../data/hustles.js';
 import { readSave, writeSave } from '../state/save.js';
 
 const ACCENT = 0x5ff0ff;
+const FONT = 'system-ui, sans-serif';
+const JOB_LISTS = { helpdesk: HELPDESK_JOBS, bounty: BOUNTY_JOBS, agents: AGENT_JOBS };
+// Where delivery boxes land, relative to the delivery spot by the door.
+const BOX_OFFSETS = [[0, 12], [-58, 32], [58, 32], [-30, 62], [30, 62], [0, 92]];
+const BOX_REACH = 52;
 
 export class DormScene extends Phaser.Scene {
   constructor() {
@@ -41,8 +48,21 @@ export class DormScene extends Phaser.Scene {
     const start = DORM.playerStart;
     this.player = new Player(this, start.x, start.y, isWalkable, start.facing);
 
+    // Machines that earn money. The corner desk is the first one.
+    this.stations = [];
+    this.deskStation = this.addStation({
+      id: 'starterDesk',
+      spot: DORM.starterDesk,
+      hustle: new HustleStation(this, {
+        ...DORM.starterDeskHustle,
+        hustles: HELPDESK_JOBS,
+        heat: HEAT.starterDesk,
+        pileMax: STARTER_DESK_PILE_MAX,
+      }),
+    });
+
     // Plots start empty; bought items get installed into them.
-    this.plots = DORM.plots.map((def) => ({ ...def, itemId: null, sprite: null, footprint: null }));
+    this.plots = DORM.plots.map((def) => ({ ...def, itemId: null, sprite: null, footprint: null, station: null }));
     for (const plot of this.plots) plot.outline = this.drawPlotOutline(plot);
     this.rebuildNavigation();
 
@@ -69,22 +89,25 @@ export class DormScene extends Phaser.Scene {
       .setDepth(-5000)
       .setVisible(false);
 
-    // The corner desk: stand there to do quick jobs that pay into a cash pile.
-    this.hustle = new HustleStation(this, {
-      ...DORM.starterDeskHustle,
-      hustles: STARTER_HUSTLES,
-      heat: STARTER_DESK_HEAT,
-      pileMax: STARTER_DESK_PILE_MAX,
-    });
-    this.carried = 0; // cash in your hands, not yet stashed
+    // What you're holding (cash or one box), orders on the way, boxes at the door.
+    this.carried = 0;
     this.carryStack = [];
-    this.events.on('spot-leave', (id) => { if (id === 'starterDesk') this.pickUpDeskCash(); });
+    this.carryBox = null;
+    this.orders = [];
+    this.boxes = [];
+    this.shopOpen = false;
     this.events.on('spot-enter', (id) => { if (id === 'stash') this.stashCash(); });
-    this.addFirstTimeArrow();
+
+    // The laptop becomes the shop once you've stashed enough cash.
+    gameState.on('cash', this.checkShopUnlock, this);
+    this.events.once('shutdown', () => gameState.off('cash', this.checkShopUnlock, this));
 
     // Pick up where you left off, then keep saving automatically.
     this.restoreProgress();
     this.setupAutosave();
+    if (gameState.shopUnlocked) this.setDeskLabel('Shop');
+    else this.addArrowOverDesk('hustle-done');
+    this.checkShopUnlock(gameState.cash); // saves from before the shop existed
 
     this.addHint();
     this.scene.launch('UIScene');
@@ -100,16 +123,12 @@ export class DormScene extends Phaser.Scene {
     this.player.update(dt, input);
     this.updateSpots();
 
-    // Work automatically while standing still at the desk with free hands.
-    const atDesk = this.spotNear('starterDesk');
-    const still = !this.player.moving && !this.moveTarget;
-    const working = this.hustle.update(dt, {
-      canWork: atDesk && still && this.carried === 0,
-      near: atDesk,
-      handsFull: atDesk && this.carried > 0,
-    });
-    this.player.setWorking(working);
-    this.updateCarryStack();
+    this.updateOrders(dt);
+    this.updateBoxes();
+    this.tryInstall();
+    this.updateStations(dt);
+    this.updateShopOpen();
+    this.updateCarryVisuals();
 
     if (this.hint && (input.x !== 0 || input.y !== 0)) {
       const hint = this.hint;
@@ -117,6 +136,195 @@ export class DormScene extends Phaser.Scene {
       this.tweens.add({ targets: hint, alpha: 0, duration: 600, onComplete: () => hint.destroy() });
     }
     if (this.debugFeet) this.debugFeet.setPosition(this.player.x, this.player.y);
+  }
+
+  get handsFull() {
+    return this.carried > 0 || this.carryBox !== null;
+  }
+
+  // ---------- Earning machines ----------
+
+  addStation({ id, spot, hustle, plotId = null }) {
+    const station = { id, spot, hustle, plotId, near: false };
+    this.stations.push(station);
+    return station;
+  }
+
+  // Each installed item gets its own station: jobs, heat, and a cash pile on the floor beside it.
+  createMachineStation(plot) {
+    const earns = ITEMS[plot.itemId].earns;
+    if (!earns) return null;
+    const top = plot.sprite.y - plot.sprite.height;
+    const hustle = new HustleStation(this, {
+      panelX: plot.x,
+      panelY: top - 34,
+      screen: { x: plot.x, y: top + 30, w: 0, h: 0 },
+      pile: { x: plot.x + 88, y: plot.y + 42, depth: plot.y + 42 },
+      hustles: JOB_LISTS[earns.jobs],
+      heat: earns.heat ? HEAT[earns.heat] : null,
+      pileMax: earns.pileMax,
+      idle: earns.mode === 'idle',
+      payMultiplier: earns.payMultiplier,
+    });
+    // You stand in front of the machine (below it on screen) to work or collect.
+    const spot = { x: plot.x, y: plot.y + 72, reach: earns.mode === 'idle' ? 110 : 80 };
+    return this.addStation({ id: plot.id, spot, hustle, plotId: plot.id });
+  }
+
+  updateStations(dt) {
+    // The corner desk only does hustles until the shop unlocks (or as a safety net).
+    this.deskStation.hustle.enabled = !gameState.shopUnlocked || this.safetyNetActive();
+
+    const still = !this.player.moving && !this.moveTarget;
+    let workTarget = null;
+    let bestDist = Infinity;
+    for (const st of this.stations) {
+      const dist = Math.hypot(this.player.x - st.spot.x, this.player.y - st.spot.y);
+      const near = dist < st.spot.reach;
+      if (st.near && !near) this.collectFrom(st); // walking away takes its cash
+      st.near = near;
+      if (near && !st.hustle.idle && st.hustle.enabled && dist < bestDist) {
+        workTarget = st;
+        bestDist = dist;
+      }
+    }
+
+    let working = false;
+    for (const st of this.stations) {
+      const atThis = st === workTarget;
+      working = st.hustle.update(dt, {
+        canWork: atThis && still && !this.handsFull,
+        near: st.near,
+        handsFull: atThis && this.handsFull,
+      }) || working;
+    }
+    this.player.setWorking(working);
+  }
+
+  collectFrom(station) {
+    if (this.carryBox) return; // hands are busy with a box; the cash waits
+    const amount = station.hustle.takePile();
+    if (amount <= 0) return;
+    this.carried += amount;
+    this.player.setCarrying(true);
+    this.rebuildCarryStack();
+  }
+
+  // If you're broke and own nothing that earns, the laptop does hustles again
+  // so you can never get stuck.
+  safetyNetActive() {
+    if (!gameState.shopUnlocked) return false;
+    const ownsEarner = this.plots.some((p) => p.itemId && ITEMS[p.itemId].earns);
+    if (ownsEarner || this.orders.length || this.boxes.length || this.carryBox) return false;
+    const cheapest = Math.min(...Object.values(ITEMS).filter((i) => i.earns).map((i) => i.price));
+    return gameState.cash + this.carried < cheapest;
+  }
+
+  // ---------- Shop, orders and deliveries ----------
+
+  checkShopUnlock(total) {
+    if (gameState.shopUnlocked || total < SHOP_UNLOCK_CASH) return;
+    gameState.unlockShop();
+    this.setDeskLabel('Shop');
+    this.addArrowOverDesk('order-placed');
+  }
+
+  updateShopOpen() {
+    const open = gameState.shopUnlocked && this.spotNear('starterDesk');
+    if (open === this.shopOpen) return;
+    this.shopOpen = open;
+    this.events.emit('shop', open);
+  }
+
+  /** Called by the shop screen. Returns true if the order went through. */
+  buy(itemId) {
+    const item = ITEMS[itemId];
+    if (!item || !gameState.shopUnlocked || !gameState.spend(item.price)) return false;
+    this.orders.push({ itemId, remaining: item.deliverySeconds });
+    this.events.emit('order-placed', itemId);
+    return true;
+  }
+
+  updateOrders(dt) {
+    for (const order of [...this.orders]) {
+      order.remaining -= dt;
+      if (order.remaining > 0) continue;
+      this.orders.splice(this.orders.indexOf(order), 1);
+      this.spawnBox(order.itemId, true);
+    }
+  }
+
+  spawnBox(itemId, announce = false) {
+    const [ox, oy] = BOX_OFFSETS[this.boxes.length % BOX_OFFSETS.length];
+    const x = DORM.deliverySpot.x + ox;
+    const y = DORM.deliverySpot.y + oy;
+    const sprite = this.add.image(x, y, 'item-box').setOrigin(0.5, 1).setDepth(y);
+    const label = this.add.text(x, y - 70, ITEMS[itemId].name, {
+      fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#fde68a', backgroundColor: '#0b0e14cc', padding: { x: 6, y: 3 },
+    }).setOrigin(0.5).setDepth(12100);
+    this.boxes.push({ itemId, x, y, sprite, label });
+    if (announce) {
+      this.floatText('Delivery!', DORM.deliverySpot.x, DORM.deliverySpot.y - 150, '#fde68a');
+      this.tweens.add({ targets: sprite, y: { from: y - 30, to: y }, duration: 400, ease: 'Bounce.out' });
+      this.events.emit('delivery', itemId);
+    }
+  }
+
+  updateBoxes() {
+    if (this.carryBox) return;
+    for (const box of this.boxes) {
+      if (Math.hypot(this.player.x - box.x, this.player.y - box.y) > BOX_REACH) continue;
+      if (this.carried > 0) {
+        this.nudge('Hands full: stash your cash first', box.x, box.y - 100);
+        return;
+      }
+      this.pickUpBox(box);
+      return;
+    }
+  }
+
+  pickUpBox(box) {
+    this.boxes.splice(this.boxes.indexOf(box), 1);
+    box.label.destroy();
+    box.sprite.setScale(0.85);
+    this.carryBox = { itemId: box.itemId, sprite: box.sprite };
+    this.player.setCarrying(true);
+    this.floatText(`${ITEMS[box.itemId].name}: put it on an empty plot`, this.player.x, this.player.y - 140, '#5ff0ff');
+  }
+
+  // Walking onto an empty plot with a box installs it there.
+  tryInstall() {
+    if (!this.carryBox) return;
+    const { width: w, height: h } = DORM.plotSize;
+    const plot = this.plots.find((p) => !p.itemId && pointInPolygon(this.player.x, this.player.y, [
+      [p.x - w / 2, p.y], [p.x, p.y - h / 2], [p.x + w / 2, p.y], [p.x, p.y + h / 2],
+    ]));
+    if (!plot) return;
+
+    const { itemId, sprite } = this.carryBox;
+    this.carryBox = null;
+    sprite.destroy();
+    this.placeItem(itemId, plot.id, { ignorePlayer: true });
+    this.rebuildNavigation();
+    this.clearMoveTarget();
+    this.movePlayerToOpenFloor();
+    if (this.carried === 0) this.player.setCarrying(false);
+    plot.sprite.setScale(0.6);
+    this.tweens.add({ targets: plot.sprite, scale: 1, duration: 350, ease: 'Back.out' });
+    this.floatText('Installed!', plot.x, plot.sprite.y - plot.sprite.height - 20, '#4ade80');
+    this.events.emit('installed', itemId);
+  }
+
+  // After an install, step off the new item's footprint onto the nearest open floor.
+  movePlayerToOpenFloor() {
+    const { x, y } = this.player;
+    if (this.player.canStandAt(x, y)) return;
+    const spot = findPath(this.navGrid, x, y, x, y)?.at(-1);
+    if (!spot) return;
+    this.tweens.add({
+      targets: this.player.sprite, x: spot.x, y: spot.y, duration: 180,
+      onUpdate: () => this.player.sprite.setDepth(this.player.sprite.y),
+    });
   }
 
   // ---------- Plots and items ----------
@@ -140,11 +348,11 @@ export class DormScene extends Phaser.Scene {
   }
 
   /**
-   * Installs an item into an empty plot: its sprite, plus its footprint as a
-   * blocked area. Returns false if the plot is taken or you're standing in the way.
-   * Call rebuildNavigation() afterwards.
+   * Installs an item into an empty plot: its sprite, its footprint as a blocked
+   * area, and (if it earns) its station. Returns false if the plot is taken or
+   * you're standing in the way. Call rebuildNavigation() afterwards.
    */
-  placeItem(itemId, plotId) {
+  placeItem(itemId, plotId, { ignorePlayer = false } = {}) {
     const item = ITEMS[itemId];
     const plot = this.plots.find((p) => p.id === plotId);
     if (!item || !plot || plot.itemId) return false;
@@ -155,7 +363,7 @@ export class DormScene extends Phaser.Scene {
     const anchorX = Math.round(plot.x - fx);
     const anchorY = Math.round(plot.y - fy);
     const footprint = translatePolygon(item.footprint, anchorX, anchorY);
-    if (pointInPolygon(this.player.x, this.player.y, footprint)) return false;
+    if (!ignorePlayer && pointInPolygon(this.player.x, this.player.y, footprint)) return false;
 
     // Drawn in depth order so the player can walk in front of or behind it.
     plot.sprite = this.add.image(anchorX, anchorY, `station-${itemId}`)
@@ -165,6 +373,7 @@ export class DormScene extends Phaser.Scene {
     plot.footprint = footprint;
     plot.outline.setVisible(false);
     this.blocked.push(footprint);
+    plot.station = this.createMachineStation(plot);
     this.updatePowerUsage();
     return true;
   }
@@ -174,9 +383,14 @@ export class DormScene extends Phaser.Scene {
     const plot = this.plots.find((p) => p.id === plotId);
     if (!plot || !plot.itemId) return null;
     const itemId = plot.itemId;
+    if (plot.station) {
+      this.collectFrom(plot.station);
+      plot.station.hustle.destroy();
+      this.stations.splice(this.stations.indexOf(plot.station), 1);
+    }
     plot.sprite.destroy();
     this.blocked.splice(this.blocked.indexOf(plot.footprint), 1);
-    Object.assign(plot, { itemId: null, sprite: null, footprint: null });
+    Object.assign(plot, { itemId: null, sprite: null, footprint: null, station: null });
     plot.outline.setVisible(true);
     this.updatePowerUsage();
     return itemId;
@@ -193,12 +407,12 @@ export class DormScene extends Phaser.Scene {
     if (DEBUG) this.drawDebug();
   }
 
-  // ---------- Places you can use (stash, shop) ----------
+  // ---------- Places you can use (stash, desk, breaker) ----------
 
   addSpot(id, def, label, iconKey, { hiddenWhenFar = false, hiddenWhenNear = false } = {}) {
     const container = this.add.container(def.labelX ?? def.x, def.labelY).setDepth(12000);
     const text = this.add.text(0, 0, label, {
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: FONT,
       fontSize: '22px',
       fontStyle: 'bold',
       color: '#5ff0ff',
@@ -213,7 +427,7 @@ export class DormScene extends Phaser.Scene {
     const farAlpha = hiddenWhenFar ? 0 : 0.55;
     container.setAlpha(farAlpha);
     this.tweens.add({ targets: container, y: def.labelY - 6, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-    return { id, def, container, near: false, farAlpha, nearAlpha: hiddenWhenNear ? 0 : 1 };
+    return { id, def, container, text, near: false, farAlpha, nearAlpha: hiddenWhenNear ? 0 : 1 };
   }
 
   updateSpots() {
@@ -230,18 +444,38 @@ export class DormScene extends Phaser.Scene {
     return this.spots.find((s) => s.id === id)?.near ?? false;
   }
 
+  setDeskLabel(label) {
+    this.spots.find((s) => s.id === 'starterDesk')?.text.setText(label);
+  }
+
   // ---------- Saving progress (see src/state/save.js) ----------
 
   saveProgress() {
-    const plots = Object.fromEntries(this.plots.filter((p) => p.itemId).map((p) => [p.id, p.itemId]));
+    const installed = this.plots.filter((p) => p.itemId);
     writeSave({
       cash: gameState.cash,
       powerTier: gameState.powerTier,
+      shopUnlocked: gameState.shopUnlocked,
       carried: this.carried,
-      plots,
-      desk: { pile: this.hustle.pile, heat: Math.round(this.hustle.heat), overheated: this.hustle.overheated },
+      carryBox: this.carryBox?.itemId ?? null,
+      plots: Object.fromEntries(installed.map((p) => [p.id, p.itemId])),
+      machines: Object.fromEntries(installed.filter((p) => p.station).map((p) => [p.id, this.stationState(p.station)])),
+      desk: this.stationState(this.deskStation),
+      orders: this.orders.map((o) => ({ itemId: o.itemId, remaining: Math.ceil(o.remaining) })),
+      boxes: this.boxes.map((b) => b.itemId),
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
     });
+  }
+
+  stationState(station) {
+    const h = station.hustle;
+    return { pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated };
+  }
+
+  restoreStation(station, state) {
+    if (!station || !state) return;
+    Object.assign(station.hustle, state);
+    station.hustle.renderPile();
   }
 
   restoreProgress() {
@@ -249,26 +483,35 @@ export class DormScene extends Phaser.Scene {
     if (!save) return;
 
     gameState.cash = save.cash;
+    gameState.shopUnlocked = save.shopUnlocked;
     gameState.setPowerTier(save.powerTier);
 
     // Reinstall items with the player out of the way, then put the player back.
     const start = { x: this.player.x, y: this.player.y };
     this.player.sprite.setPosition(-1000, -1000);
-    for (const [plotId, itemId] of Object.entries(save.plots)) this.placeItem(itemId, plotId);
+    for (const [plotId, itemId] of Object.entries(save.plots)) {
+      this.placeItem(itemId, plotId);
+      this.restoreStation(this.plots.find((p) => p.id === plotId)?.station, save.machines[plotId]);
+    }
     this.rebuildNavigation();
     let pos = save.player && this.player.canStandAt(save.player.x, save.player.y) ? save.player : start;
     if (!this.player.canStandAt(pos.x, pos.y)) pos = findPath(this.navGrid, pos.x, pos.y, pos.x, pos.y)?.at(-1) ?? start;
     this.player.sprite.setPosition(pos.x, pos.y).setDepth(pos.y);
     this.player.facing = save.player?.facing ?? this.player.facing;
 
-    Object.assign(this.hustle, { pile: save.desk.pile, heat: save.desk.heat, overheated: save.desk.overheated });
-    this.hustle.renderPile();
+    this.restoreStation(this.deskStation, save.desk);
+    this.orders = save.orders.map((o) => ({ ...o }));
+    for (const itemId of save.boxes) this.spawnBox(itemId);
 
+    if (save.carryBox) {
+      const sprite = this.add.image(0, 0, 'item-box').setOrigin(0.5, 1).setScale(0.85);
+      this.carryBox = { itemId: save.carryBox, sprite };
+    }
     if (save.carried > 0) {
       this.carried = save.carried;
-      this.player.setCarrying(true);
       this.rebuildCarryStack();
     }
+    if (this.handsFull) this.player.setCarrying(true);
     this.player.showIdle();
   }
 
@@ -290,21 +533,12 @@ export class DormScene extends Phaser.Scene {
 
   // ---------- Carrying and stashing cash ----------
 
-  // Walking away from the desk takes its cash pile with you.
-  pickUpDeskCash() {
-    const amount = this.hustle.takePile();
-    if (amount <= 0) return;
-    this.carried += amount;
-    this.player.setCarrying(true);
-    this.rebuildCarryStack();
-  }
-
-  // Reaching the laundry basket stashes everything you're carrying.
+  // Reaching the laundry basket stashes all the cash you're carrying.
   stashCash() {
     if (this.carried <= 0) return;
     const amount = this.carried;
     this.carried = 0;
-    this.player.setCarrying(false);
+    if (!this.carryBox) this.player.setCarrying(false);
     const { x, y } = DORM.stash;
     for (const [i, s] of this.carryStack.entries()) {
       this.tweens.add({
@@ -314,32 +548,53 @@ export class DormScene extends Phaser.Scene {
     }
     this.carryStack = [];
     gameState.addCash(amount);
-    this.hustle.floatText(`+$${amount}`, x, y - 90, '#b8ffcf');
+    this.floatText(`+$${amount}`, x, y - 90, '#b8ffcf');
   }
 
-  // One cash image per $8 carried, stacked above your hands.
+  // One cash image per $8 carried (up to 8), stacked above your hands.
   rebuildCarryStack() {
     const wanted = Math.min(8, Math.ceil(this.carried / 8));
     while (this.carryStack.length < wanted) this.carryStack.push(this.add.image(0, 0, 'item-cash').setScale(0.9));
-    this.updateCarryStack();
+    this.updateCarryVisuals();
   }
 
-  updateCarryStack() {
-    if (this.carryStack.length === 0) return;
+  updateCarryVisuals() {
     const f = this.player.facing;
     const ox = f === 'left' ? -16 : f === 'right' ? 16 : 0;
     const depth = this.player.sprite.depth + (f === 'up' ? -0.5 : 0.5);
     this.carryStack.forEach((s, i) => {
       s.setPosition(this.player.x + ox, this.player.y - 62 - i * 8).setDepth(depth);
     });
+    if (this.carryBox) {
+      this.carryBox.sprite.setPosition(this.player.x + ox, this.player.y - 42).setDepth(depth);
+    }
+    // Empty plots glow bigger while you hold a box, to show where it can go.
+    const scale = this.carryBox ? 1.08 : 1;
+    for (const p of this.plots) if (!p.itemId && p.outline.scale !== scale) p.outline.setScale(scale);
   }
 
-  // A bouncing arrow over the desk until you finish your first job.
-  addFirstTimeArrow() {
+  // A bouncing arrow over the laptop until an event happens (first job, first order).
+  addArrowOverDesk(untilEvent) {
+    this.deskArrow?.destroy();
     const { x } = DORM.starterDeskHustle.screen;
-    const arrow = this.add.triangle(x, 92, 0, 0, 28, 0, 14, 22, 0x5ff0ff).setDepth(12600);
+    const arrow = this.add.triangle(x, 92, 0, 0, 28, 0, 14, 22, ACCENT).setDepth(12600);
     this.tweens.add({ targets: arrow, y: 102, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-    this.events.once('hustle-done', () => arrow.destroy());
+    this.events.once(untilEvent, () => arrow.destroy());
+    this.deskArrow = arrow;
+  }
+
+  floatText(text, x, y, color) {
+    const t = this.add.text(x, y, text, {
+      fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color, stroke: '#0b0e14', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(13000);
+    this.tweens.add({ targets: t, y: y - 40, alpha: 0, duration: 1400, ease: 'Sine.out', onComplete: () => t.destroy() });
+  }
+
+  // Same as floatText, but at most once every 2 seconds (for "can't do that" hints).
+  nudge(text, x, y) {
+    if (this.time.now < (this.nextNudge ?? 0)) return;
+    this.nextNudge = this.time.now + 2000;
+    this.floatText(text, x, y, '#fca5a5');
   }
 
   // ---------- Movement ----------
@@ -401,7 +656,7 @@ export class DormScene extends Phaser.Scene {
       ? 'Tap where to go, or drag to steer'
       : 'Move: WASD / arrow keys, click where to go, or click and drag';
     this.hint = this.add.text(this.scale.width / 2, 110, text, {
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: FONT,
       fontSize: '24px',
       color: '#5ff0ff',
       backgroundColor: '#0b0e14cc',
@@ -410,8 +665,9 @@ export class DormScene extends Phaser.Scene {
   }
 
   // ---------- Debug (?debug or #debug) ----------
-  // green = walkable floor, red = blocked, cyan = plots, yellow dot = your feet.
-  // Keys: B fill empty plots, R remove everything, M +$100, P next power supply.
+  // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
+  // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
+  // U unlock the shop, D deliver all orders now.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -427,6 +683,8 @@ export class DormScene extends Phaser.Scene {
     });
     this.input.keyboard.on('keydown-M', () => gameState.addCash(100));
     this.input.keyboard.on('keydown-P', () => gameState.setPowerTier((gameState.powerTier + 1) % POWER_TIERS.length));
+    this.input.keyboard.on('keydown-U', () => this.checkShopUnlock(Infinity));
+    this.input.keyboard.on('keydown-D', () => { for (const o of this.orders) o.remaining = 0; });
     this.drawDebug();
   }
 
@@ -440,7 +698,7 @@ export class DormScene extends Phaser.Scene {
     g.lineStyle(2, 0xff3355, 0.9);
     for (const shape of this.blocked) g.strokePoints(pts(shape), true);
     g.lineStyle(2, 0xffd000, 0.8);
-    for (const spot of [DORM.stash, DORM.starterDesk, DORM.breaker, DORM.deliverySpot]) {
+    for (const spot of [DORM.stash, DORM.breaker, DORM.deliverySpot, ...this.stations.map((s) => s.spot)]) {
       g.strokeCircle(spot.x, spot.y, spot.reach ?? 20);
     }
   }

@@ -25,7 +25,8 @@
 - The dorm starts empty. The corner desk is the free starter workstation and the shop screen.
 - Items live in `src/data/catalog.js` (price, watts, delivery time, footprint). Install with `placeItem(itemId, plotId)`, remove with `removeItem(plotId)`, then call `rebuildNavigation()`.
 - Limits are POWER (upgradable power supply, meter in the HUD; over capacity trips the breaker) and HEAT (machines heat up with use and need a cooldown; fans attach to a machine to cool it).
-- Buying: order at the shop, box appears at the door after a delay (15s cheap to ~2min big), carry it to a plot. Shovel removes an item for 25% back.
+- Shop: the corner laptop does hustles until stashed cash reaches $100 (`SHOP_UNLOCK_CASH`), then becomes the shop (`src/ui/ShopPanel.js`). Safety net: if broke with no earning machine, the laptop does hustles again.
+- Buying: order at the shop, box appears at the door after the item's delivery time, carry it onto an empty plot to install. Each item's `earns` config (catalog.js) creates a HustleStation: 'work' (stand at it) or 'idle' (runs alone). Shovel removes an item for 25% back (not built yet).
 - Hustles: `src/data/hustles.js` (jobs, heat, pile cap) and `src/systems/HustleStation.js`. Standing still at a station works it; pay goes to a desk pile; leaving picks the pile up; the stash spot banks it.
 - Saving: `src/state/save.js` (localStorage, versioned, validated on load). When you add game state, add it to `saveProgress()`/`restoreProgress()` in DormScene and to `readSave()` checks; bump VERSION if the shape changes.
 - Maintenance: servers crash and PCs need updates; the player repairs them. Energy drinks give a speed boost. The player should always be busy.
