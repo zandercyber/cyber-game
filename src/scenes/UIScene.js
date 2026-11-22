@@ -1,6 +1,7 @@
 // Heads-up display drawn on top of the room: cash, power meter, shop, buttons.
 import * as Phaser from 'phaser';
 import { ITEMS, POWER_ITEMS, POWER_TIERS, SHOVEL_REFUND } from '../data/catalog.js';
+import { AUGUSTUS_UPGRADES } from '../data/augustus.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
 import { ShopPanel } from '../ui/ShopPanel.js';
@@ -11,6 +12,7 @@ const FONT = 'system-ui, sans-serif';
 const BAR_W = 150;
 const GREEN = 0x4ade80;
 const RED = 0xf87171;
+const PURPLE = 0xc4b5fd;
 const css = (color) => `#${color.toString(16).padStart(6, '0')}`;
 
 export class UIScene extends Phaser.Scene {
@@ -54,6 +56,9 @@ export class UIScene extends Phaser.Scene {
       onBuy: (itemId) => this.dorm.buy(itemId),
       getOrders: () => this.dorm.orders,
       getPower: () => ({ next: this.dorm.nextPower(), pending: this.dorm.powerPending() }),
+      getAugustus: () => this.dorm.augustusInfo(),
+      onHire: () => this.dorm.hireAugustus(),
+      onUpgrade: (kind) => this.dorm.buyUpgrade(kind),
     });
     this.shop.setVisible(this.dorm.shopOpen);
     const onShop = (open) => this.shop.setVisible(open);
@@ -78,8 +83,12 @@ export class UIScene extends Phaser.Scene {
       }
     };
     const onPower = (power) => this.showBanner('Power upgraded!', `${power.name}: up to ${power.capacity} W`);
+    const onArrive = () => this.showBanner('Augustus has arrived!', 'He works your machines and carries cash to the hamper. Upgrade him in the shop.', PURPLE);
+    const onUpgrade = (kind, level) => this.showBanner('Augustus upgraded!', `${AUGUSTUS_UPGRADES[kind].name} is now level ${level}.`, PURPLE);
     this.dorm.events.on('breaker-tripped', onTrip);
     this.dorm.events.on('power-installed', onPower);
+    this.dorm.events.on('augustus-arrived', onArrive);
+    this.dorm.events.on('augustus-upgraded', onUpgrade);
 
     this.renderCash(gameState.cash);
     this.renderPower(gameState.power);
@@ -92,6 +101,8 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('shop', onShop);
       this.dorm.events.off('breaker-tripped', onTrip);
       this.dorm.events.off('power-installed', onPower);
+      this.dorm.events.off('augustus-arrived', onArrive);
+      this.dorm.events.off('augustus-upgraded', onUpgrade);
     });
   }
 
@@ -102,6 +113,7 @@ export class UIScene extends Phaser.Scene {
     else if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
     else if (carryBox) text = Object.hasOwn(POWER_ITEMS, carryBox.itemId) ? 'Take the box to the breaker panel' : 'Carry the box to an empty plot';
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;
+    else if (this.dorm.augustusArrival !== null) text = `Augustus arrives in ${Math.ceil(this.dorm.augustusArrival)}s`;
     if (this.shop.visible) text = ''; // the shop lists deliveries itself
     this.deliveryChip.setVisible(Boolean(text));
     if (text && this.deliveryChip.text !== text) this.deliveryChip.setText(text);
@@ -111,7 +123,9 @@ export class UIScene extends Phaser.Scene {
   showBanner(title, subtitle, color = GREEN) {
     const { width } = this.scale;
     this.banner?.destroy(); // newest message wins
-    const box = this.add.container(width / 2, 170).setDepth(40000);
+    // Beside the shop while it's open, so it doesn't cover the buttons.
+    const x = this.shop?.visible ? (540 + width) / 2 + 10 : width / 2;
+    const box = this.add.container(x, 170).setDepth(40000);
     this.banner = box;
     const t1 = this.add.text(0, -18, title, { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: css(color) }).setOrigin(0.5);
     const t2 = this.add.text(0, 14, subtitle, {

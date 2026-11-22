@@ -4,9 +4,11 @@ A tycoon-style cybersecurity simulator for the browser. Start in your dorm room,
 
 ## Status
 
-Prototype: work hustles at the corner desk and carry the cash to your stash (the laundry basket). At $50 the laptop becomes the shop: order gear, carry the delivery box to an empty plot, and your new machines earn money (hustles, bug bounties, or an AI agent business that runs on its own).
+Prototype: work hustles at the corner desk and carry the cash to your stash (the laundry basket). At $50 the laptop becomes the shop: order gear, carry the delivery box to an empty plot, and your new machines earn money (hustles, bug bounties, or an AI agent business on the server rack).
 
-Power is the limit. Every machine draws watts, including the laptop (60 W). Go over your power supply and the lights flicker, then the breaker trips: the room goes dark and machines stop (the laptop keeps going on its battery), and the surge **fries** a machine (two if you trip it again). Stand at the breaker panel to reset it, then stand at each fried machine to repair it. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
+Power is the limit. Every machine draws watts, including the laptop (60 W). Go over your power supply and the lights flicker, then the breaker trips: the room goes dark and machines stop (the laptop keeps going on its battery), and the surge **fries** a machine (two if you trip it again). Stand at the breaker panel to reset it, then stand at each fried machine to repair it.
+
+**Augustus**, an AI agent on a cloud, can be hired in the shop's **Upgrades** tab ($300). He works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. Upgrade his speed, profit boost and energy in the same tab. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 
@@ -34,7 +36,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire Augustus now.
 
 ## Project structure
 
@@ -45,7 +47,8 @@ src/scenes/      one scene per room (DormScene)
 src/data/        room layouts (floor, obstacles, plots) and the item catalog
 src/state/       shared game state: cash and power
 src/scenes/UIScene.js  HUD: cash, power meter, shovel, banners, fullscreen
-src/ui/ShopPanel.js    the shop screen
+src/ui/ShopPanel.js    the shop screen (Gear and Upgrades tabs)
+src/systems/Augustus.js  the AI agent helper (data in src/data/augustus.js)
 src/systems/     player movement, joystick, collision and pathfinding
 ```
 

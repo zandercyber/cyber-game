@@ -6,6 +6,7 @@
 // and falls back to defaults for anything that doesn't make sense.
 
 import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
+import { AUGUSTUS, MAX_LEVEL, UPGRADE_IDS, augustusStats } from '../data/augustus.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -80,6 +81,25 @@ export function readSave({ plotIds, pileMax }) {
     .map((o) => ({ itemId: o.itemId, remaining: num(o.remaining, 0, orderable(o.itemId).deliverySeconds) }));
   const boxes = (Array.isArray(raw.boxes) ? raw.boxes : []).slice(0, 10).filter(isOrderable);
 
+  // Augustus: hired (or on his way), upgrade levels, energy, what he's carrying.
+  let augustus = null;
+  const a = obj(raw.augustus);
+  if (a.hired === true || Number.isFinite(a.arriving)) {
+    const lv = obj(a.levels);
+    const levels = Object.fromEntries(UPGRADE_IDS.map((k) => [k, int(lv[k], 0, MAX_LEVEL)]));
+    const maxAwake = augustusStats(levels).awakeSeconds;
+    augustus = {
+      hired: a.hired === true,
+      arriving: a.hired === true ? null : num(a.arriving, 0, AUGUSTUS.arriveSeconds),
+      levels,
+      awake: num(a.awake, 0, maxAwake, maxAwake),
+      nap: num(a.nap, 0, AUGUSTUS.napSeconds),
+      carried: int(a.carried, 0, MAX_CASH),
+      // Checked against the room by the scene before it's used.
+      position: Number.isFinite(a.x) && Number.isFinite(a.y) ? { x: a.x, y: a.y } : null,
+    };
+  }
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
@@ -93,6 +113,7 @@ export function readSave({ plotIds, pileMax }) {
     carryBox: isOrderable(raw.carryBox) ? raw.carryBox : null,
     powerTier: int(raw.powerTier, 0, POWER_TIERS.length - 1),
     tripped: raw.tripped === true, // older saves don't have it: not tripped
+    augustus,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {
