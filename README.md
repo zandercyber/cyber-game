@@ -18,6 +18,10 @@ Prototype: work hustles at the corner desk, carry the cash to your stash (the la
 
 Tap/click-to-move finds a path around furniture.
 
+## Saving
+
+Progress saves automatically in your browser (localStorage) every few seconds, when you leave or close the tab, and before the game updates itself. Nothing is sent anywhere. **New game** (bottom-left, tap twice) erases it. Saves are validated on load, so an edited or corrupted save can't break the game.
+
 ## Run locally
 
 Requires Node.js 22+.

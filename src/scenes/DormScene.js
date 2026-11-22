@@ -10,6 +10,7 @@ import { gameState } from '../state/GameState.js';
 import { asset } from '../systems/assets.js';
 import { HustleStation } from '../systems/HustleStation.js';
 import { STARTER_HUSTLES, STARTER_DESK_HEAT, STARTER_DESK_PILE_MAX } from '../data/hustles.js';
+import { readSave, writeSave } from '../state/save.js';
 
 const ACCENT = 0x5ff0ff;
 
@@ -80,6 +81,10 @@ export class DormScene extends Phaser.Scene {
     this.events.on('spot-leave', (id) => { if (id === 'starterDesk') this.pickUpDeskCash(); });
     this.events.on('spot-enter', (id) => { if (id === 'stash') this.stashCash(); });
     this.addFirstTimeArrow();
+
+    // Pick up where you left off, then keep saving automatically.
+    this.restoreProgress();
+    this.setupAutosave();
 
     this.addHint();
     this.scene.launch('UIScene');
@@ -223,6 +228,64 @@ export class DormScene extends Phaser.Scene {
 
   spotNear(id) {
     return this.spots.find((s) => s.id === id)?.near ?? false;
+  }
+
+  // ---------- Saving progress (see src/state/save.js) ----------
+
+  saveProgress() {
+    const plots = Object.fromEntries(this.plots.filter((p) => p.itemId).map((p) => [p.id, p.itemId]));
+    writeSave({
+      cash: gameState.cash,
+      powerTier: gameState.powerTier,
+      carried: this.carried,
+      plots,
+      desk: { pile: this.hustle.pile, heat: Math.round(this.hustle.heat), overheated: this.hustle.overheated },
+      player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
+    });
+  }
+
+  restoreProgress() {
+    const save = readSave({ plotIds: this.plots.map((p) => p.id), pileMax: STARTER_DESK_PILE_MAX });
+    if (!save) return;
+
+    gameState.cash = save.cash;
+    gameState.setPowerTier(save.powerTier);
+
+    // Reinstall items with the player out of the way, then put the player back.
+    const start = { x: this.player.x, y: this.player.y };
+    this.player.sprite.setPosition(-1000, -1000);
+    for (const [plotId, itemId] of Object.entries(save.plots)) this.placeItem(itemId, plotId);
+    this.rebuildNavigation();
+    let pos = save.player && this.player.canStandAt(save.player.x, save.player.y) ? save.player : start;
+    if (!this.player.canStandAt(pos.x, pos.y)) pos = findPath(this.navGrid, pos.x, pos.y, pos.x, pos.y)?.at(-1) ?? start;
+    this.player.sprite.setPosition(pos.x, pos.y).setDepth(pos.y);
+    this.player.facing = save.player?.facing ?? this.player.facing;
+
+    Object.assign(this.hustle, { pile: save.desk.pile, heat: save.desk.heat, overheated: save.desk.overheated });
+    this.hustle.renderPile();
+
+    if (save.carried > 0) {
+      this.carried = save.carried;
+      this.player.setCarrying(true);
+      this.rebuildCarryStack();
+    }
+    this.player.showIdle();
+  }
+
+  // Save every few seconds, when the tab is hidden or closed (phones), and
+  // right before the game reloads itself into a new version.
+  setupAutosave() {
+    const saveNow = () => this.saveProgress();
+    const onVisibility = () => { if (document.visibilityState === 'hidden') saveNow(); };
+    this.time.addEvent({ delay: 3000, loop: true, callback: saveNow });
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', saveNow);
+    window.addEventListener('cyber-game:save-now', saveNow);
+    this.events.once('shutdown', () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', saveNow);
+      window.removeEventListener('cyber-game:save-now', saveNow);
+    });
   }
 
   // ---------- Carrying and stashing cash ----------

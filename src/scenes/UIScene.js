@@ -2,6 +2,7 @@
 import * as Phaser from 'phaser';
 import { POWER_TIERS } from '../data/catalog.js';
 import { gameState } from '../state/GameState.js';
+import { clearSave } from '../state/save.js';
 
 const PANEL_BG = 0x0b0e14;
 const ACCENT = '#5ff0ff';
@@ -34,6 +35,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
 
     this.addFullscreenButton(width, height);
+    this.addNewGameButton(height);
 
     this.renderCash(gameState.cash);
     this.renderPower(gameState.power);
@@ -88,6 +90,30 @@ export class UIScene extends Phaser.Scene {
       const s = 44 / Math.max(this.powerIcon.width, this.powerIcon.height);
       this.powerIcon.setScale(s);
     }
+  }
+
+  // Bottom-left. Tap once to arm, tap again within 3 s to wipe the save and restart.
+  addNewGameButton(height) {
+    const idle = 'New game';
+    const button = this.add.text(20, height - 20, idle, {
+      fontFamily: FONT,
+      fontSize: '18px',
+      color: '#94a3b8',
+      backgroundColor: '#0b0e14cc',
+      padding: { x: 12, y: 8 },
+    }).setOrigin(0, 1).setInteractive({ useHandCursor: true });
+    this.buttons.push(button);
+    let armedUntil = 0;
+    button.on('pointerup', () => {
+      if (this.time.now < armedUntil) {
+        clearSave();
+        window.location.reload();
+        return;
+      }
+      armedUntil = this.time.now + 3000;
+      button.setText('Tap again to erase progress').setColor('#fca5a5');
+      this.time.delayedCall(3000, () => button.setText(idle).setColor('#94a3b8'));
+    });
   }
 
   addFullscreenButton(width, height) {
