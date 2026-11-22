@@ -12,8 +12,8 @@
 - Each build writes `version.json`; `src/systems/updateCheck.js` reloads players into newer deploys (GitHub Pages caches pages ~10 min).
 - Art lives in `src/assets/` and is loaded with `asset('folder/file.png')` so builds hash file names (no stale browser caches).
 - Player sheet `src/assets/player/zander.png`: 32x52 frames, 4 columns, drawn at 2x.
-- Augustus sheet `src/assets/augustus/augustus.png`: 20x26 frames drawn at 3x: 0 front, 1 side (faces right; flip for left), 2 drowsy (eyes off), 3-5 sleeping on his cloud. Cut from Zander's Gemini sheets, which use a 60-pixel-wide art grid (1376/60 = 22.93 px per art pixel).
   Rows: 0 idle (down, left, right, up), 1-4 walk down/left/right/up, 5-8 carry down/left/right/up, 9 work (back view).
+- Augustus sheet `src/assets/augustus/augustus.png`: 20x26 frames drawn at 3x: 0 front, 1 side (faces right; flip for left), 2 drowsy (eyes off), 3-5 sleeping on his cloud. Cut from Zander's Gemini sheets, which use a 60-pixel-wide art grid (1376/60 = 22.93 px per art pixel).
 - Rooms are 1376x768 isometric-style images; world coordinates match image pixels.
 - Stations are separate sprites anchored at bottom-center with a floor `footprint` polygon (see `src/data/dorm.js`).
 
@@ -30,6 +30,7 @@
 - Shop: the corner laptop does hustles until stashed cash reaches $50 (`SHOP_UNLOCK_CASH`), then becomes the shop (`src/ui/ShopPanel.js`). Safety net: if broke with no earning machine, the laptop does hustles again.
 - Buying: order at the shop, box appears at the door after the item's delivery time, carry it onto an empty plot to install. Each item's `earns` config (catalog.js) creates a HustleStation: 'work' (stand at it) or 'idle' (runs alone; unused now, the server rack is a work machine). Shovel: HUD button when standing at an installed item, tap twice; `shovel(plotId)` removes it and puts 25% of the price (`SHOVEL_REFUND`) in your hands as cash. Use `orderable(id)` for anything that can be ordered (machines and power).
 - Hustles: `src/data/hustles.js` (jobs, heat, pile cap) and `src/systems/HustleStation.js`. Standing still at a station works it; pay goes to a desk pile; leaving picks the pile up; the stash spot banks it.
+- Security questions: `src/data/questions.js` (original, Zander-reviewed bank: helpdesk / web / ai, matched to the machine's jobs). When the player (never a helper) finishes a job, 1 in 5 (`QUESTION_CHANCE`) calls `DormScene.askQuestion`; the job waits (`hustle.awaiting`) for `answerQuestion`: right = double pay, wrong or 15 s timeout = job fails. No repeats until a group's bank is used up (`questionsSeen`, saved). Card UI: `src/ui/QuestionPanel.js`. Debug key Q: a question on every job.
 - Saving: `src/state/save.js` (localStorage, versioned, validated on load). When you add game state, add it to `saveProgress()`/`restoreProgress()` in DormScene and to `readSave()` checks; bump VERSION if the shape changes.
 - Maintenance: servers crash and PCs need updates; the player repairs them. Energy drinks give a speed boost. The player should always be busy.
 - Prestige comes later. Finish the dorm section first.

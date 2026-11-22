@@ -5,16 +5,18 @@
 //   so you can't stay at one machine forever.
 // - When the pile is full, work pauses until you carry the cash away.
 // - With no power (breaker tripped) nothing runs; the machine just cools.
+// - When you (not a helper) finish a job, a security question can pop up first:
+//   right = double pay, wrong or too slow = the job fails (see DormScene.askQuestion).
 // - A power surge can fry it. A fried machine smokes and earns nothing until
 //   you stand at it (with the power on) to repair it.
 
 const BAR_W = 170;
 const FONT = 'system-ui, sans-serif';
-const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee' };
+const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee', quiz: '#0e7490ee' };
 const REPAIR_SECONDS = 3;
 
 export class HustleStation {
-  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1, sprite = null }) {
+  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1, sprite = null, group = null }) {
     this.scene = scene;
     this.hustles = hustles;
     this.heatCfg = heat; // null = this machine doesn't heat up
@@ -25,6 +27,8 @@ export class HustleStation {
     this.powered = true; // false while the breaker is tripped
     this.sprite = sprite; // the machine's picture (darkened while fried)
     this.broken = false; // fried by a power surge
+    this.group = group; // which security questions it asks ('helpdesk' | 'web' | 'ai')
+    this.awaiting = null; // a finished job waiting on your answer: { bonus }
     this.repairProgress = 0;
     this.screen = screen; // where the laptop screen is (for glow and steam)
     this.pilePos = pile; // where cash stacks up on the desk
@@ -96,6 +100,13 @@ export class HustleStation {
       return false;
     }
     if (this.broken) return this.updateBroken(dt, { canWork: canWork && !helper, near, handsFull });
+    if (this.awaiting) {
+      // Paused on a security question; it just cools while you answer.
+      this.working = false;
+      if (h) this.heat = Math.max(0, this.heat - h.idleCooling * dt);
+      this.render(dt, { near, handsFull: false });
+      return false;
+    }
     if (!this.powered) {
       // No power: no work, no progress. It only cools down.
       this.working = false;
@@ -110,7 +121,7 @@ export class HustleStation {
       // Runs on its own; the player isn't needed (or shown working).
       if (!this.pileFull) {
         this.progress += dt / this.job.seconds;
-        if (this.progress >= 1) this.finishJob(bonus);
+        if (this.progress >= 1) this.finishJob(bonus, true); // nobody to quiz
       }
       this.render(dt, { near, handsFull: false });
       return false;
@@ -123,7 +134,7 @@ export class HustleStation {
       this.working = true;
       this.progress += (dt * rate) / this.job.seconds;
       if (h) this.heat = Math.min(100, this.heat + h.perSecondWorking * dt);
-      if (this.progress >= 1) this.finishJob(bonus);
+      if (this.progress >= 1) this.finishJob(bonus, helper);
       if (h && this.heat >= 100) {
         this.overheated = true;
         this.working = false;
@@ -171,7 +182,28 @@ export class HustleStation {
     }
   }
 
-  finishJob(bonus = 1) {
+  finishJob(bonus = 1, helper = false) {
+    if (!helper && this.group && this.scene.askQuestion?.(this)) {
+      this.awaiting = { bonus };
+      this.working = false;
+      return;
+    }
+    this.payJob(bonus);
+  }
+
+  /** Your answer to this job's security question. Returns what it paid (0 if it failed). */
+  resolveQuestion(correct) {
+    if (!this.awaiting) return 0;
+    const { bonus } = this.awaiting;
+    this.awaiting = null;
+    if (correct) return this.payJob(bonus * 2);
+    this.progress = 0;
+    this.job = this.pickJob();
+    this.floatText('Job failed', this.pilePos.x, this.pilePos.y - 40, '#fca5a5');
+    return 0;
+  }
+
+  payJob(bonus = 1) {
     const pay = Math.round(this.job.pay * this.payMultiplier * bonus);
     this.pile = Math.min(this.pileMax, this.pile + pay);
     this.progress = 0;
@@ -179,6 +211,7 @@ export class HustleStation {
     this.scene.events.emit('hustle-done', pay);
     this.floatText(`+$${pay}`, this.pilePos.x, this.pilePos.y - 40, '#b8ffcf');
     this.renderPile();
+    return pay;
   }
 
   /** Hands the whole desk pile to the player. Returns the amount taken. */
@@ -200,7 +233,10 @@ export class HustleStation {
 
     let text = this.job.name;
     let bg = STATUS_COLORS.job;
-    if (this.broken) {
+    if (this.awaiting) {
+      text = 'Security check! Answer the question';
+      bg = STATUS_COLORS.quiz;
+    } else if (this.broken) {
       if (!near) text = 'FRIED'; // short from afar, so several fried machines don't clutter the room
       else if (!this.powered) text = 'Fried! Reset the breaker first';
       else if (this.repairProgress > 0) text = `Repairing… ${Math.floor(this.repairProgress * 100)}%`;
