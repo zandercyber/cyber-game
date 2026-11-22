@@ -1,6 +1,8 @@
 import * as Phaser from 'phaser';
 import { DORM } from '../data/dorm.js';
-import { ITEMS, POWER_TIERS, SMALL_IMAGES } from '../data/catalog.js';
+import {
+  ITEMS, POWER_TIERS, POWER_ITEMS, SMALL_IMAGES, SHOVEL_REFUND, orderable,
+} from '../data/catalog.js';
 import { makeWalkableCheck, translatePolygon, centerY, pointInPolygon } from '../systems/geometry.js';
 import { Joystick } from '../systems/Joystick.js';
 import { Player, createPlayerAnimations } from '../systems/Player.js';
@@ -20,6 +22,10 @@ const JOB_LISTS = { helpdesk: HELPDESK_JOBS, bounty: BOUNTY_JOBS, agents: AGENT_
 // Where delivery boxes land, relative to the delivery spot by the door.
 const BOX_OFFSETS = [[0, 12], [-58, 32], [58, 32], [-30, 62], [30, 62], [0, 92]];
 const BOX_REACH = 52;
+const TRIP_DELAY = 0.8; // seconds over the limit before the breaker trips
+const RESET_SECONDS = 1.5; // how long you stand at the panel to reset it
+const DIM = 0.32; // how dark the room gets while the power is out
+const isPower = (id) => typeof id === 'string' && Object.hasOwn(POWER_ITEMS, id);
 
 export class DormScene extends Phaser.Scene {
   constructor() {
@@ -70,9 +76,10 @@ export class DormScene extends Phaser.Scene {
     this.spots = [
       this.addSpot('stash', DORM.stash, 'Stash', 'item-cash'),
       this.addSpot('starterDesk', DORM.starterDesk, 'Work', null, { hiddenWhenNear: true }),
-      // Only labeled when you're next to it (later: also when the breaker trips).
+      // Labeled when you're next to it, when it trips, or when you carry a power box.
       this.addSpot('breaker', DORM.breaker, 'Breaker', null, { hiddenWhenFar: true }),
     ];
+    this.setupBreaker();
 
     this.keys = this.input.keyboard.addKeys({
       w: 'W', a: 'A', s: 'S', d: 'D',
@@ -126,6 +133,7 @@ export class DormScene extends Phaser.Scene {
     this.updateOrders(dt);
     this.updateBoxes();
     this.tryInstall();
+    this.updateBreaker(dt);
     this.updateStations(dt);
     this.updateShopOpen();
     this.updateCarryVisuals();
@@ -175,6 +183,9 @@ export class DormScene extends Phaser.Scene {
     // The corner desk only does hustles until the shop unlocks (or as a safety net).
     this.deskStation.hustle.enabled = !gameState.shopUnlocked || this.safetyNetActive();
 
+    // A tripped breaker cuts power to every machine. The laptop runs on its battery.
+    for (const st of this.stations) st.hustle.powered = st === this.deskStation || !gameState.tripped;
+
     const still = !this.player.moving && !this.moveTarget;
     let workTarget = null;
     let bestDist = Infinity;
@@ -198,7 +209,7 @@ export class DormScene extends Phaser.Scene {
         handsFull: atThis && this.handsFull,
       }) || working;
     }
-    this.player.setWorking(working);
+    this.player.setWorking(working || this.resetting);
   }
 
   collectFrom(station) {
@@ -215,7 +226,9 @@ export class DormScene extends Phaser.Scene {
   safetyNetActive() {
     if (!gameState.shopUnlocked) return false;
     const ownsEarner = this.plots.some((p) => p.itemId && ITEMS[p.itemId].earns);
-    if (ownsEarner || this.orders.length || this.boxes.length || this.carryBox) return false;
+    const machineComing = [...this.orders.map((o) => o.itemId), ...this.boxes.map((b) => b.itemId), this.carryBox?.itemId]
+      .some((id) => typeof id === 'string' && Object.hasOwn(ITEMS, id));
+    if (ownsEarner || machineComing) return false;
     const cheapest = Math.min(...Object.values(ITEMS).filter((i) => i.earns).map((i) => i.price));
     return gameState.cash + this.carried < cheapest;
   }
@@ -238,11 +251,25 @@ export class DormScene extends Phaser.Scene {
 
   /** Called by the shop screen. Returns true if the order went through. */
   buy(itemId) {
-    const item = ITEMS[itemId];
-    if (!item || !gameState.shopUnlocked || !gameState.spend(item.price)) return false;
+    const item = orderable(itemId);
+    if (!item || !gameState.shopUnlocked) return false;
+    // Power: only the next upgrade, one at a time.
+    if (isPower(itemId) && (itemId !== this.nextPower()?.id || this.powerPending())) return false;
+    if (!gameState.spend(item.price)) return false;
     this.orders.push({ itemId, remaining: item.deliverySeconds });
     this.events.emit('order-placed', itemId);
     return true;
+  }
+
+  /** The next power upgrade you can buy, or null once you have the best one. */
+  nextPower() {
+    const next = POWER_TIERS[gameState.powerTier + 1];
+    return next ? POWER_ITEMS[next.id] : null;
+  }
+
+  /** True while a power upgrade is ordered, waiting at the door, or in your hands. */
+  powerPending() {
+    return [...this.orders.map((o) => o.itemId), ...this.boxes.map((b) => b.itemId), this.carryBox?.itemId].some(isPower);
   }
 
   updateOrders(dt) {
@@ -259,7 +286,7 @@ export class DormScene extends Phaser.Scene {
     const x = DORM.deliverySpot.x + ox;
     const y = DORM.deliverySpot.y + oy;
     const sprite = this.add.image(x, y, 'item-box').setOrigin(0.5, 1).setDepth(y);
-    const label = this.add.text(x, y - 70, ITEMS[itemId].name, {
+    const label = this.add.text(x, y - 70, orderable(itemId).name, {
       fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#fde68a', backgroundColor: '#0b0e14cc', padding: { x: 6, y: 3 },
     }).setOrigin(0.5).setDepth(12100);
     this.boxes.push({ itemId, x, y, sprite, label });
@@ -289,12 +316,18 @@ export class DormScene extends Phaser.Scene {
     box.sprite.setScale(0.85);
     this.carryBox = { itemId: box.itemId, sprite: box.sprite };
     this.player.setCarrying(true);
-    this.floatText(`${ITEMS[box.itemId].name}: put it on an empty plot`, this.player.x, this.player.y - 140, '#5ff0ff');
+    const where = isPower(box.itemId) ? 'take it to the breaker' : 'put it on an empty plot';
+    this.floatText(`${orderable(box.itemId).name}: ${where}`, this.player.x, this.player.y - 140, '#5ff0ff');
   }
 
   // Walking onto an empty plot with a box installs it there.
+  // Power boxes go to the breaker panel instead.
   tryInstall() {
     if (!this.carryBox) return;
+    if (isPower(this.carryBox.itemId)) {
+      if (this.spotNear('breaker')) this.installPower();
+      return;
+    }
     const { width: w, height: h } = DORM.plotSize;
     const plot = this.plots.find((p) => !p.itemId && pointInPolygon(this.player.x, this.player.y, [
       [p.x - w / 2, p.y], [p.x, p.y - h / 2], [p.x + w / 2, p.y], [p.x, p.y + h / 2],
@@ -378,7 +411,7 @@ export class DormScene extends Phaser.Scene {
     return true;
   }
 
-  /** Clears a plot (the shovel will use this). Returns the removed item's id. */
+  /** Clears a plot (used by the shovel). Returns the removed item's id. */
   removeItem(plotId) {
     const plot = this.plots.find((p) => p.id === plotId);
     if (!plot || !plot.itemId) return null;
@@ -405,6 +438,194 @@ export class DormScene extends Phaser.Scene {
   rebuildNavigation() {
     this.navGrid = buildGrid((x, y) => this.player.canStandAt(x, y), this.scale.width, this.scale.height);
     if (DEBUG) this.drawDebug();
+  }
+
+  // ---------- Power and the breaker ----------
+
+  setupBreaker() {
+    this.breakerSpot = this.spots.find((s) => s.id === 'breaker');
+    // Progress bar under the label while you reset the breaker.
+    this.resetBarBg = this.add.rectangle(-60, 32, 120, 10, 0x0b0e14, 0.9).setOrigin(0, 0.5).setVisible(false);
+    this.resetBarFill = this.add.rectangle(-60, 32, 0, 10, 0x4ade80).setOrigin(0, 0.5).setVisible(false);
+    this.breakerSpot.container.add([this.resetBarBg, this.resetBarFill]);
+    // The room goes dim while the power is out.
+    this.darkness = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x02040a)
+      .setOrigin(0)
+      .setDepth(11000)
+      .setAlpha(0);
+    this.overloadFor = 0;
+    this.resetProgress = 0;
+    this.resetting = false;
+    this.breakerMode = null;
+    this.breakerArrow = null;
+    this.lastResetAt = -Infinity;
+    this.stepAway = false; // after a failed reset, leave the panel before trying again
+  }
+
+  updateBreaker(dt) {
+    // Using more watts than your power supply allows trips the breaker after a moment.
+    const { used, capacity } = gameState.power;
+    if (!gameState.tripped && used > capacity) {
+      this.overloadFor += dt;
+      if (this.overloadFor >= TRIP_DELAY) this.trip();
+    } else {
+      this.overloadFor = 0;
+    }
+
+    // Stand still at the panel for a moment to switch it back on.
+    // If it tripped right back, step away first so it doesn't flicker on and off forever.
+    const atPanel = this.spotNear('breaker');
+    if (!atPanel) this.stepAway = false;
+    const still = !this.player.moving && !this.moveTarget;
+    this.resetting = gameState.tripped && still && atPanel && !this.stepAway;
+    if (this.resetting) {
+      this.resetProgress += dt / RESET_SECONDS;
+      if (this.resetProgress >= 1) this.resetBreaker();
+    } else {
+      this.resetProgress = 0;
+    }
+    const showBar = this.resetProgress > 0;
+    this.resetBarBg.setVisible(showBar);
+    this.resetBarFill.setVisible(showBar);
+    this.resetBarFill.width = Math.min(1, this.resetProgress) * 120;
+
+    // Point at the panel when it needs you.
+    let mode = this.carryBox && isPower(this.carryBox.itemId) ? 'install' : null;
+    if (gameState.tripped) mode = this.stepAway ? 'overloaded' : 'tripped';
+    if (mode !== this.breakerMode) this.setBreakerMode(mode);
+  }
+
+  setBreakerMode(mode) {
+    this.breakerMode = mode;
+    const spot = this.breakerSpot;
+    const [label, color] = {
+      tripped: ['Reset breaker', '#fca5a5'],
+      overloaded: ['Overloaded!', '#fca5a5'],
+      install: ['Install power', '#fde68a'],
+    }[mode] ?? ['Breaker', '#5ff0ff'];
+    spot.text.setText(label).setColor(color);
+    spot.farAlpha = mode ? 1 : 0;
+    if (!spot.near) spot.container.setAlpha(spot.farAlpha);
+
+    this.breakerArrow?.destroy();
+    this.breakerArrow = null;
+    if (!mode) return;
+    const { labelX, labelY } = DORM.breaker;
+    const arrow = this.add.triangle(labelX, labelY - 54, 0, 0, 28, 0, 14, 22, mode === 'install' ? 0xfde68a : 0xf87171)
+      .setDepth(12600);
+    this.tweens.add({ targets: arrow, y: labelY - 44, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.breakerArrow = arrow;
+  }
+
+  /** Cuts the power. silent: no banner or effects (used when loading a save). */
+  trip({ silent = false } = {}) {
+    const again = this.time.now - this.lastResetAt < 4000;
+    gameState.setTripped(true);
+    this.overloadFor = 0;
+    this.resetProgress = 0;
+    if (again && this.spotNear('breaker')) this.stepAway = true;
+    this.tweens.killTweensOf(this.darkness);
+    if (silent) {
+      this.darkness.setAlpha(DIM);
+      return;
+    }
+    this.tweens.add({ targets: this.darkness, alpha: DIM, duration: 250 });
+    this.sparks(DORM.breaker.panelX, DORM.breaker.panelY);
+    this.cameras.main.shake(180, 0.004);
+    this.events.emit('breaker-tripped', { again, ...gameState.power });
+  }
+
+  resetBreaker() {
+    gameState.setTripped(false);
+    this.lastResetAt = this.time.now;
+    this.resetProgress = 0;
+    this.overloadFor = 0;
+    // The lights flicker back on.
+    this.tweens.killTweensOf(this.darkness);
+    this.tweens.chain({
+      targets: this.darkness,
+      tweens: [
+        { alpha: 0.05, duration: 70 },
+        { alpha: 0.22, duration: 90 },
+        { alpha: 0, duration: 220 },
+      ],
+    });
+    this.floatText('Power back on!', DORM.breaker.labelX - 40, DORM.breaker.labelY - 70, '#4ade80');
+    this.events.emit('breaker-reset');
+  }
+
+  // Carrying a power box to the breaker panel installs the upgrade.
+  installPower() {
+    const { itemId, sprite } = this.carryBox;
+    this.carryBox = null;
+    sprite.destroy();
+    if (this.carried === 0) this.player.setCarrying(false);
+    const power = POWER_ITEMS[itemId];
+    if (power.tier > gameState.powerTier) gameState.setPowerTier(power.tier);
+    this.floatText('Power upgraded!', DORM.breaker.labelX - 40, DORM.breaker.labelY - 70, '#4ade80');
+    this.events.emit('power-installed', power);
+    // You're already at the panel, so it gets switched back on too.
+    const { used, capacity } = gameState.power;
+    if (gameState.tripped && used <= capacity) this.resetBreaker();
+  }
+
+  sparks(x, y) {
+    for (let i = 0; i < 14; i++) {
+      const p = this.add.circle(x, y, 2 + Math.random() * 3, i % 2 ? 0xfde047 : 0xffffff).setDepth(12550);
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 60;
+      this.tweens.add({
+        targets: p, x: x + Math.cos(angle) * dist, y: y + Math.sin(angle) * dist + 25, alpha: 0, scale: 0.3,
+        duration: 350 + Math.random() * 350, ease: 'Quad.out', onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  // ---------- Shovel ----------
+
+  /** The installed item you're standing at (for the shovel button), or null. */
+  shovelTarget() {
+    if (this.carryBox) return null; // hands are busy with a box
+    let best = null;
+    let bestDist = Infinity;
+    for (const p of this.plots) {
+      if (!p.itemId) continue;
+      const spot = p.station?.spot ?? { x: p.x, y: p.y + 72, reach: 90 };
+      const dist = Math.hypot(this.player.x - spot.x, this.player.y - spot.y);
+      if (dist < spot.reach && dist < bestDist) {
+        best = p;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  /** Digs up an installed item. You get part of its price back as cash in your hands. */
+  shovel(plotId) {
+    const plot = this.plots.find((p) => p.id === plotId);
+    if (!plot?.itemId || this.carryBox) return false;
+    const top = plot.sprite.y - plot.sprite.height;
+    const itemId = this.removeItem(plotId);
+    this.rebuildNavigation();
+    const refund = Math.round(ITEMS[itemId].price * SHOVEL_REFUND);
+    this.carried += refund;
+    if (this.carried > 0) this.player.setCarrying(true);
+    this.rebuildCarryStack();
+    this.dust(plot.x, plot.y);
+    this.floatText(`Removed: +$${refund} back`, plot.x, top, '#b8ffcf');
+    this.events.emit('item-removed', itemId);
+    return true;
+  }
+
+  dust(x, y) {
+    for (let i = 0; i < 10; i++) {
+      const p = this.add.circle(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 40, 6 + Math.random() * 6, 0xa08060, 0.8)
+        .setDepth(y + 60);
+      this.tweens.add({
+        targets: p, y: p.y - 30 - Math.random() * 30, alpha: 0, scale: 1.8, duration: 600 + Math.random() * 300,
+        ease: 'Sine.out', onComplete: () => p.destroy(),
+      });
+    }
   }
 
   // ---------- Places you can use (stash, desk, breaker) ----------
@@ -455,6 +676,7 @@ export class DormScene extends Phaser.Scene {
     writeSave({
       cash: gameState.cash,
       powerTier: gameState.powerTier,
+      tripped: gameState.tripped,
       shopUnlocked: gameState.shopUnlocked,
       carried: this.carried,
       carryBox: this.carryBox?.itemId ?? null,
@@ -499,6 +721,7 @@ export class DormScene extends Phaser.Scene {
     this.player.sprite.setPosition(pos.x, pos.y).setDepth(pos.y);
     this.player.facing = save.player?.facing ?? this.player.facing;
 
+    if (save.tripped) this.trip({ silent: true });
     this.restoreStation(this.deskStation, save.desk);
     this.orders = save.orders.map((o) => ({ ...o }));
     for (const itemId of save.boxes) this.spawnBox(itemId);
@@ -569,7 +792,7 @@ export class DormScene extends Phaser.Scene {
       this.carryBox.sprite.setPosition(this.player.x + ox, this.player.y - 42).setDepth(depth);
     }
     // Empty plots glow bigger while you hold a box, to show where it can go.
-    const scale = this.carryBox ? 1.08 : 1;
+    const scale = this.carryBox && !isPower(this.carryBox.itemId) ? 1.08 : 1;
     for (const p of this.plots) if (!p.itemId && p.outline.scale !== scale) p.outline.setScale(scale);
   }
 

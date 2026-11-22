@@ -48,15 +48,27 @@ export const ITEMS = {
   },
 };
 
-// The power supply you keep upgrading. Going over capacity will trip the breaker.
-// icon: image shown next to the power meter (null = none yet).
+// The power supply you keep upgrading. Going over capacity trips the breaker.
+// Upgrades are ordered at the shop, arrive as a box, and get carried to the
+// breaker panel. icon: image shown in the HUD and shop (null = none yet).
 export const POWER_TIERS = [
-  { id: 'wall-outlet', name: 'Wall outlet', capacity: 500, price: 0, icon: null },
-  { id: 'power-strip', name: 'Power strip', capacity: 900, price: 60, icon: 'item-power-strip' },
-  { id: 'surge-protector', name: 'Surge protector', capacity: 1500, price: 200, icon: 'item-surge-protector' },
-  { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 600, icon: 'item-ups' },
-  { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, icon: null },
+  { id: 'wall-outlet', name: 'Wall outlet', capacity: 500, price: 0, deliverySeconds: 0, icon: null },
+  { id: 'power-strip', name: 'Power strip', capacity: 900, price: 60, deliverySeconds: 10, icon: 'item-power-strip' },
+  { id: 'surge-protector', name: 'Surge protector', capacity: 1500, price: 200, deliverySeconds: 20, icon: 'item-surge-protector' },
+  { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 600, deliverySeconds: 40, icon: 'item-ups' },
+  { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, deliverySeconds: 60, icon: null },
 ];
+
+// Power upgrades by id (everything after the starting wall outlet), with their tier number.
+export const POWER_ITEMS = Object.fromEntries(POWER_TIERS.slice(1).map((t, i) => [t.id, { ...t, tier: i + 1 }]));
+
+/** Anything you can order: a machine (ITEMS) or a power upgrade (POWER_ITEMS). null if unknown. */
+export function orderable(id) {
+  if (typeof id !== 'string') return null;
+  if (Object.hasOwn(ITEMS, id)) return ITEMS[id];
+  if (Object.hasOwn(POWER_ITEMS, id)) return POWER_ITEMS[id];
+  return null;
+}
 
 // Small images used around the game (HUD icons, carried things, tools).
 // Paths are relative to src/assets.

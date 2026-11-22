@@ -6,6 +6,8 @@ A tycoon-style cybersecurity simulator for the browser. Start in your dorm room,
 
 Prototype: work hustles at the corner desk and carry the cash to your stash (the laundry basket). At $100 the laptop becomes the shop: order gear, carry the delivery box to an empty plot, and your new machines earn money (hustles, bug bounties, or an AI agent business that runs on its own).
 
+Power is the limit. Every machine draws watts; go over your power supply and the breaker trips, the room goes dark and machines stop (the laptop keeps going on its battery). Stand at the breaker panel to reset it. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
+
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 
 ## Controls
@@ -42,7 +44,8 @@ src/main.js      game setup (size, scaling, scenes)
 src/scenes/      one scene per room (DormScene)
 src/data/        room layouts (floor, obstacles, plots) and the item catalog
 src/state/       shared game state: cash and power
-src/scenes/UIScene.js  HUD: cash, power meter, fullscreen
+src/scenes/UIScene.js  HUD: cash, power meter, shovel, banners, fullscreen
+src/ui/ShopPanel.js    the shop screen
 src/systems/     player movement, joystick, collision and pathfinding
 ```
 

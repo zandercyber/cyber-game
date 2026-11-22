@@ -5,7 +5,7 @@
 // corrupted. Loading only reads the fields we expect, checks every value,
 // and falls back to defaults for anything that doesn't make sense.
 
-import { ITEMS, POWER_TIERS } from '../data/catalog.js';
+import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -58,7 +58,8 @@ export function readSave({ plotIds, pileMax }) {
   }
 
   const obj = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
-  const isItem = (id) => typeof id === 'string' && Object.hasOwn(ITEMS, id);
+  // Anything orderable can be on the way or in a box: machines and power upgrades.
+  const isOrderable = (id) => orderable(id) !== null;
   const station = (value, max) => {
     const v = obj(value);
     return { pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true };
@@ -75,9 +76,9 @@ export function readSave({ plotIds, pileMax }) {
   const orders = (Array.isArray(raw.orders) ? raw.orders : [])
     .slice(0, 20)
     .map(obj)
-    .filter((o) => isItem(o.itemId))
-    .map((o) => ({ itemId: o.itemId, remaining: num(o.remaining, 0, ITEMS[o.itemId].deliverySeconds) }));
-  const boxes = (Array.isArray(raw.boxes) ? raw.boxes : []).slice(0, 10).filter(isItem);
+    .filter((o) => isOrderable(o.itemId))
+    .map((o) => ({ itemId: o.itemId, remaining: num(o.remaining, 0, orderable(o.itemId).deliverySeconds) }));
+  const boxes = (Array.isArray(raw.boxes) ? raw.boxes : []).slice(0, 10).filter(isOrderable);
 
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
@@ -89,8 +90,9 @@ export function readSave({ plotIds, pileMax }) {
     machines,
     orders,
     boxes,
-    carryBox: isItem(raw.carryBox) ? raw.carryBox : null,
+    carryBox: isOrderable(raw.carryBox) ? raw.carryBox : null,
     powerTier: int(raw.powerTier, 0, POWER_TIERS.length - 1),
+    tripped: raw.tripped === true, // older saves don't have it: not tripped
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {
