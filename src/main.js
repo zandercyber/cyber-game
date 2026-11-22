@@ -3,6 +3,7 @@ import { DormScene } from './scenes/DormScene.js';
 import { UIScene } from './scenes/UIScene.js';
 import { WORLD } from './data/dorm.js';
 import { DEBUG } from './systems/debug.js';
+import { watchForUpdates, BUILD_ID } from './systems/updateCheck.js';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -22,4 +23,8 @@ const game = new Phaser.Game({
 // In debug mode, expose the game for testing from the browser console.
 if (DEBUG) {
   window.__CYBER_GAME__ = game;
+  window.__BUILD_ID__ = BUILD_ID;
 }
+
+// Reload into the newest version after a deploy (see updateCheck.js).
+watchForUpdates();

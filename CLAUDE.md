@@ -9,6 +9,7 @@
 
 ## Art pipeline
 - Art comes from Gemini on a flat magenta (#FF00FF) background; Claude cuts it out, snaps pixel grids and scales it.
+- Each build writes `version.json`; `src/systems/updateCheck.js` reloads players into newer deploys (GitHub Pages caches pages ~10 min).
 - Art lives in `src/assets/` and is loaded with `asset('folder/file.png')` so builds hash file names (no stale browser caches).
 - Player sheet `src/assets/player/zander.png`: 32x52 frames, 4 columns, drawn at 2x.
   Rows: 0 idle (down, left, right, up), 1-4 walk down/left/right/up, 5-8 carry down/left/right/up, 9 work (back view).

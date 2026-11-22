@@ -47,6 +47,7 @@ src/systems/     player movement, joystick, collision and pathfinding
 - [Phaser 4](https://phaser.io/) game engine
 - Vite for local development and minified builds (no source maps)
 - GitHub Actions deploys to GitHub Pages on every merge to `main`
+- The game checks `version.json` on load and when you return to the tab, and reloads itself into a newer deploy
 
 ## Workflow
 
