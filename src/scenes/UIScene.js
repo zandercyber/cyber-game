@@ -59,8 +59,16 @@ export class UIScene extends Phaser.Scene {
     return g;
   }
 
-  renderCash(cash) {
+  renderCash(cash, change = 0) {
     this.cashText.setText(`$${cash.toLocaleString('en-US')}`);
+    if (change > 0) {
+      // Little bump and a "+$N" that floats up from the counter.
+      this.tweens.add({ targets: this.cashText, scale: { from: 1.25, to: 1 }, duration: 300, ease: 'Back.out' });
+      const t = this.add.text(this.cashText.x + this.cashText.width + 12, 50, `+$${change}`, {
+        fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#4ade80',
+      }).setOrigin(0, 0.5);
+      this.tweens.add({ targets: t, y: 30, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+    }
   }
 
   renderPower({ used, capacity, tierName }) {

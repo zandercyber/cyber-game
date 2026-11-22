@@ -8,6 +8,8 @@ import { DEBUG } from '../systems/debug.js';
 import { buildGrid, findPath } from '../systems/pathfinding.js';
 import { gameState } from '../state/GameState.js';
 import { asset } from '../systems/assets.js';
+import { HustleStation } from '../systems/HustleStation.js';
+import { STARTER_HUSTLES, STARTER_DESK_HEAT, STARTER_DESK_PILE_MAX } from '../data/hustles.js';
 
 const ACCENT = 0x5ff0ff;
 
@@ -46,7 +48,7 @@ export class DormScene extends Phaser.Scene {
     // Places you can walk up to and use.
     this.spots = [
       this.addSpot('stash', DORM.stash, 'Stash', 'item-cash'),
-      this.addSpot('starterDesk', DORM.starterDesk, 'Shop'),
+      this.addSpot('starterDesk', DORM.starterDesk, 'Work', null, { hiddenWhenNear: true }),
       // Only labeled when you're next to it (later: also when the breaker trips).
       this.addSpot('breaker', DORM.breaker, 'Breaker', null, { hiddenWhenFar: true }),
     ];
@@ -66,6 +68,19 @@ export class DormScene extends Phaser.Scene {
       .setDepth(-5000)
       .setVisible(false);
 
+    // The corner desk: stand there to do quick jobs that pay into a cash pile.
+    this.hustle = new HustleStation(this, {
+      ...DORM.starterDeskHustle,
+      hustles: STARTER_HUSTLES,
+      heat: STARTER_DESK_HEAT,
+      pileMax: STARTER_DESK_PILE_MAX,
+    });
+    this.carried = 0; // cash in your hands, not yet stashed
+    this.carryStack = [];
+    this.events.on('spot-leave', (id) => { if (id === 'starterDesk') this.pickUpDeskCash(); });
+    this.events.on('spot-enter', (id) => { if (id === 'stash') this.stashCash(); });
+    this.addFirstTimeArrow();
+
     this.addHint();
     this.scene.launch('UIScene');
     this.updatePowerUsage();
@@ -79,6 +94,17 @@ export class DormScene extends Phaser.Scene {
     else if (this.moveTarget) input = this.steerToTarget(dt);
     this.player.update(dt, input);
     this.updateSpots();
+
+    // Work automatically while standing still at the desk with free hands.
+    const atDesk = this.spotNear('starterDesk');
+    const still = !this.player.moving && !this.moveTarget;
+    const working = this.hustle.update(dt, {
+      canWork: atDesk && still && this.carried === 0,
+      near: atDesk,
+      handsFull: atDesk && this.carried > 0,
+    });
+    this.player.setWorking(working);
+    this.updateCarryStack();
 
     if (this.hint && (input.x !== 0 || input.y !== 0)) {
       const hint = this.hint;
@@ -164,7 +190,7 @@ export class DormScene extends Phaser.Scene {
 
   // ---------- Places you can use (stash, shop) ----------
 
-  addSpot(id, def, label, iconKey, { hiddenWhenFar = false } = {}) {
+  addSpot(id, def, label, iconKey, { hiddenWhenFar = false, hiddenWhenNear = false } = {}) {
     const container = this.add.container(def.labelX ?? def.x, def.labelY).setDepth(12000);
     const text = this.add.text(0, 0, label, {
       fontFamily: 'system-ui, sans-serif',
@@ -182,7 +208,7 @@ export class DormScene extends Phaser.Scene {
     const farAlpha = hiddenWhenFar ? 0 : 0.55;
     container.setAlpha(farAlpha);
     this.tweens.add({ targets: container, y: def.labelY - 6, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-    return { id, def, container, near: false, farAlpha };
+    return { id, def, container, near: false, farAlpha, nearAlpha: hiddenWhenNear ? 0 : 1 };
   }
 
   updateSpots() {
@@ -190,9 +216,67 @@ export class DormScene extends Phaser.Scene {
       const near = Math.hypot(this.player.x - spot.def.x, this.player.y - spot.def.y) < spot.def.reach;
       if (near === spot.near) continue;
       spot.near = near;
-      spot.container.setAlpha(near ? 1 : spot.farAlpha).setScale(near ? 1.12 : 1);
+      spot.container.setAlpha(near ? spot.nearAlpha : spot.farAlpha).setScale(near ? 1.12 : 1);
       this.events.emit(near ? 'spot-enter' : 'spot-leave', spot.id);
     }
+  }
+
+  spotNear(id) {
+    return this.spots.find((s) => s.id === id)?.near ?? false;
+  }
+
+  // ---------- Carrying and stashing cash ----------
+
+  // Walking away from the desk takes its cash pile with you.
+  pickUpDeskCash() {
+    const amount = this.hustle.takePile();
+    if (amount <= 0) return;
+    this.carried += amount;
+    this.player.setCarrying(true);
+    this.rebuildCarryStack();
+  }
+
+  // Reaching the laundry basket stashes everything you're carrying.
+  stashCash() {
+    if (this.carried <= 0) return;
+    const amount = this.carried;
+    this.carried = 0;
+    this.player.setCarrying(false);
+    const { x, y } = DORM.stash;
+    for (const [i, s] of this.carryStack.entries()) {
+      this.tweens.add({
+        targets: s, x, y: y - 30, scale: 0.5, alpha: 0, duration: 350, delay: i * 40, ease: 'Quad.in',
+        onComplete: () => s.destroy(),
+      });
+    }
+    this.carryStack = [];
+    gameState.addCash(amount);
+    this.hustle.floatText(`+$${amount}`, x, y - 90, '#b8ffcf');
+  }
+
+  // One cash image per $8 carried, stacked above your hands.
+  rebuildCarryStack() {
+    const wanted = Math.min(8, Math.ceil(this.carried / 8));
+    while (this.carryStack.length < wanted) this.carryStack.push(this.add.image(0, 0, 'item-cash').setScale(0.9));
+    this.updateCarryStack();
+  }
+
+  updateCarryStack() {
+    if (this.carryStack.length === 0) return;
+    const f = this.player.facing;
+    const ox = f === 'left' ? -16 : f === 'right' ? 16 : 0;
+    const depth = this.player.sprite.depth + (f === 'up' ? -0.5 : 0.5);
+    this.carryStack.forEach((s, i) => {
+      s.setPosition(this.player.x + ox, this.player.y - 62 - i * 8).setDepth(depth);
+    });
+  }
+
+  // A bouncing arrow over the desk until you finish your first job.
+  addFirstTimeArrow() {
+    const { x } = DORM.starterDeskHustle.screen;
+    const arrow = this.add.triangle(x, 92, 0, 0, 28, 0, 14, 22, 0x5ff0ff).setDepth(12600);
+    this.tweens.add({ targets: arrow, y: 102, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.events.once('hustle-done', () => arrow.destroy());
   }
 
   // ---------- Movement ----------

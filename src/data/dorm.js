@@ -41,6 +41,12 @@ export const DORM = {
 
   // The corner desk is the free starter workstation: hustles and the shop screen.
   starterDesk: { x: 990, y: 415, reach: 95, labelY: 200 },
+  // Where the hustle panel, laptop screen and desk cash pile sit.
+  starterDeskHustle: {
+    panelX: 962, panelY: 150,
+    screen: { x: 962, y: 256, w: 60, h: 40 },
+    pile: { x: 1035, y: 298 },
+  },
 
   // Breaker panel on the right wall: reset it when too much power trips the breaker.
   breaker: { x: 1255, y: 500, reach: 85, labelX: 1290, labelY: 268 },

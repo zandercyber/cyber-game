@@ -4,7 +4,7 @@ A tycoon-style cybersecurity simulator for the browser. Start in your dorm room,
 
 ## Status
 
-Prototype: walk around the dorm with plots to fill, a cash counter and a power meter. The corner desk is the starter workstation and shop; buying comes next.
+Prototype: work hustles at the corner desk, carry the cash to your stash (the laundry basket), and watch the machine's heat. Buying gear comes next.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 

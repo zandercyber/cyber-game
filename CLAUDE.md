@@ -26,5 +26,6 @@
 - Items live in `src/data/catalog.js` (price, watts, delivery time, footprint). Install with `placeItem(itemId, plotId)`, remove with `removeItem(plotId)`, then call `rebuildNavigation()`.
 - Limits are POWER (upgradable power supply, meter in the HUD; over capacity trips the breaker) and HEAT (machines heat up with use and need a cooldown; fans attach to a machine to cool it).
 - Buying: order at the shop, box appears at the door after a delay (15s cheap to ~2min big), carry it to a plot. Shovel removes an item for 25% back.
+- Hustles: `src/data/hustles.js` (jobs, heat, pile cap) and `src/systems/HustleStation.js`. Standing still at a station works it; pay goes to a desk pile; leaving picks the pile up; the stash spot banks it.
 - Maintenance: servers crash and PCs need updates; the player repairs them. Energy drinks give a speed boost. The player should always be busy.
 - Prestige comes later. Finish the dorm section first.
