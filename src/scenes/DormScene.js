@@ -47,6 +47,8 @@ export class DormScene extends Phaser.Scene {
     this.spots = [
       this.addSpot('stash', DORM.stash, 'Stash', 'item-cash'),
       this.addSpot('starterDesk', DORM.starterDesk, 'Shop'),
+      // Only labeled when you're next to it (later: also when the breaker trips).
+      this.addSpot('breaker', DORM.breaker, 'Breaker', null, { hiddenWhenFar: true }),
     ];
 
     this.keys = this.input.keyboard.addKeys({
@@ -162,7 +164,7 @@ export class DormScene extends Phaser.Scene {
 
   // ---------- Places you can use (stash, shop) ----------
 
-  addSpot(id, def, label, iconKey) {
+  addSpot(id, def, label, iconKey, { hiddenWhenFar = false } = {}) {
     const container = this.add.container(def.labelX ?? def.x, def.labelY).setDepth(12000);
     const text = this.add.text(0, 0, label, {
       fontFamily: 'system-ui, sans-serif',
@@ -177,9 +179,10 @@ export class DormScene extends Phaser.Scene {
       const icon = this.add.image(-text.width / 2 - 6, 0, iconKey).setOrigin(1, 0.5);
       container.add(icon);
     }
-    container.setAlpha(0.55);
+    const farAlpha = hiddenWhenFar ? 0 : 0.55;
+    container.setAlpha(farAlpha);
     this.tweens.add({ targets: container, y: def.labelY - 6, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-    return { id, def, container, near: false };
+    return { id, def, container, near: false, farAlpha };
   }
 
   updateSpots() {
@@ -187,7 +190,7 @@ export class DormScene extends Phaser.Scene {
       const near = Math.hypot(this.player.x - spot.def.x, this.player.y - spot.def.y) < spot.def.reach;
       if (near === spot.near) continue;
       spot.near = near;
-      spot.container.setAlpha(near ? 1 : 0.55).setScale(near ? 1.12 : 1);
+      spot.container.setAlpha(near ? 1 : spot.farAlpha).setScale(near ? 1.12 : 1);
       this.events.emit(near ? 'spot-enter' : 'spot-leave', spot.id);
     }
   }
@@ -290,7 +293,7 @@ export class DormScene extends Phaser.Scene {
     g.lineStyle(2, 0xff3355, 0.9);
     for (const shape of this.blocked) g.strokePoints(pts(shape), true);
     g.lineStyle(2, 0xffd000, 0.8);
-    for (const spot of [DORM.stash, DORM.starterDesk, DORM.deliverySpot]) {
+    for (const spot of [DORM.stash, DORM.starterDesk, DORM.breaker, DORM.deliverySpot]) {
       g.strokeCircle(spot.x, spot.y, spot.reach ?? 20);
     }
   }
