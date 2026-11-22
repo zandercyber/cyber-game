@@ -1,10 +1,12 @@
 // The shop screen: opens when you stand at the corner laptop (after it unlocks).
 // Two tabs:
 //   Gear: machines plus the next power upgrade; orders arrive later as a box at the door.
-//   Upgrades: hire Augustus, then upgrade his speed, profit boost and energy.
+//   Upgrades: your carry limit and speed; hire Augustus, then upgrade his speed,
+//   profit and energy.
 
 import { ITEMS, orderable } from '../data/catalog.js';
 import { AUGUSTUS, AUGUSTUS_UPGRADES, MAX_LEVEL, UPGRADE_IDS } from '../data/augustus.js';
+import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
 
 const FONT = 'system-ui, sans-serif';
@@ -18,10 +20,12 @@ const GREEN = 0x16a34a;
 const GREY = 0x334155;
 
 // Thumbnails for the Upgrades tab: [texture, frame, scale].
-const UPGRADE_THUMBS = { speed: ['augustus', 1, 2.4], profit: ['item-cash', undefined, 1.3], energy: ['augustus', 3, 2.4] };
+const UPGRADE_THUMBS = { speed: ['augustus', 1, 2.4], profit: ['augustus', 0, 2.4], energy: ['augustus', 3, 2.4] };
+const PLAYER_THUMBS = { carry: ['item-cash', undefined, 1.3], speed: ['player', 0, 1.1] };
+const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 
 export class ShopPanel {
-  constructor(scene, { onBuy, getOrders, getPower, getAugustus, onHire, onUpgrade }) {
+  constructor(scene, { onBuy, getOrders, getPower, getAugustus, onHire, onUpgrade, getPlayerLevels, onPlayerUpgrade }) {
     this.scene = scene;
     this.onBuy = onBuy;
     this.getOrders = getOrders;
@@ -29,6 +33,8 @@ export class ShopPanel {
     this.getAugustus = getAugustus; // () => ({ hired, arriving, levels, status })
     this.onHire = onHire;
     this.onUpgrade = onUpgrade;
+    this.getPlayerLevels = getPlayerLevels; // () => { carry, speed }
+    this.onPlayerUpgrade = onPlayerUpgrade;
     const ids = Object.keys(ITEMS);
     const rowCount = ids.length + 1; // machines + one power row
     this.height = HEADER_H + rowCount * ROW_H + 64;
@@ -49,16 +55,19 @@ export class ShopPanel {
     this.rows = ids.map((id, i) => this.addRow(HEADER_H + i * ROW_H, { tab: 'gear', id, thumb: [`station-${id}`] }));
     this.powerRow = this.addRow(HEADER_H + ids.length * ROW_H, { tab: 'gear', id: null, thumb: ['item-power-strip'] });
     this.rows.push(this.powerRow);
-    // Upgrades tab: the hire row until he's hired, then one row per upgrade.
-    this.hireRow = this.addRow(HEADER_H, { tab: 'upgrades', action: 'hire', thumb: ['augustus', 0, 2.4] });
+    // Upgrades tab: yours first, then Augustus (the hire row until he's hired).
+    this.playerRows = PLAYER_UPGRADE_IDS.map((key, i) =>
+      this.addRow(HEADER_H + i * ROW_H, { tab: 'upgrades', action: `you:${key}`, thumb: PLAYER_THUMBS[key] }));
+    const augTop = HEADER_H + PLAYER_UPGRADE_IDS.length * ROW_H;
+    this.hireRow = this.addRow(augTop, { tab: 'upgrades', action: 'hire', thumb: ['augustus', 0, 2.4] });
     this.upgradeRows = UPGRADE_IDS.map((key, i) =>
-      this.addRow(HEADER_H + i * ROW_H, { tab: 'upgrades', action: key, thumb: UPGRADE_THUMBS[key] }));
-    this.rows.push(this.hireRow, ...this.upgradeRows);
+      this.addRow(augTop + i * ROW_H, { tab: 'upgrades', action: key, thumb: UPGRADE_THUMBS[key] }));
+    this.rows.push(...this.playerRows, this.hireRow, ...this.upgradeRows);
 
     this.ordersText = scene.add.text(20, HEADER_H + rowCount * ROW_H + 14, '', {
       fontFamily: FONT, fontSize: '15px', color: '#fbbf24', lineSpacing: 4,
     });
-    this.agentText = scene.add.text(20, HEADER_H + UPGRADE_IDS.length * ROW_H + 14, '', {
+    this.agentText = scene.add.text(20, augTop + UPGRADE_IDS.length * ROW_H + 14, '', {
       fontFamily: FONT, fontSize: '15px', color: '#c4b5fd', lineSpacing: 4, wordWrap: { width: W - 40 },
     });
     this.root.add([this.ordersText, this.agentText]);
@@ -116,6 +125,7 @@ export class ShopPanel {
       if (!this.root.visible || this.tab !== row.tab || !row.shown) return;
       let ok = false;
       if (row.action === 'hire') ok = this.onHire();
+      else if (row.action?.startsWith('you:')) ok = this.onPlayerUpgrade(row.action.slice(4));
       else if (row.action) ok = this.onUpgrade(row.action);
       else if (row.id) ok = this.onBuy(row.id);
       if (ok) {
@@ -217,6 +227,14 @@ export class ShopPanel {
   }
 
   refreshUpgrades() {
+    // Yours.
+    const mine = this.getPlayerLevels();
+    for (const row of this.playerRows) {
+      const key = row.action.slice(4);
+      this.refreshLevelRow(row, PLAYER_UPGRADES[key], mine[key], PLAYER_MAX_LEVEL);
+    }
+
+    // Augustus.
     const aug = this.getAugustus();
     const hired = aug.hired;
     this.hireRow.shown = !hired;
@@ -230,19 +248,21 @@ export class ShopPanel {
         : 'AI agent on a cloud. Works your machines and carries cash to the hamper.');
       this.setButton(this.hireRow, coming ? 'On the way' : `$${AUGUSTUS.hirePrice}`,
         !coming && gameState.cash >= AUGUSTUS.hirePrice);
-      this.agentText.setText('More upgrades are coming, including ones for you.');
+      this.agentText.setText('Hire Augustus to unlock his upgrades.');
       return;
     }
-
     for (const row of this.upgradeRows) {
-      const upgrade = AUGUSTUS_UPGRADES[row.action];
-      const level = aug.levels[row.action];
-      const maxed = level >= MAX_LEVEL;
-      row.name.setText(`${upgrade.name} · level ${level}/${MAX_LEVEL}`);
-      row.info.setText(maxed ? `${upgrade.describe(level)} (max)` : `Next: ${upgrade.describe(level + 1)}`);
-      const price = maxed ? null : upgrade.prices[level];
-      this.setButton(row, maxed ? 'Max' : `$${price}`, !maxed && gameState.cash >= price);
+      this.refreshLevelRow(row, AUGUSTUS_UPGRADES[row.action], aug.levels[row.action], MAX_LEVEL);
     }
     this.agentText.setText(`Augustus: ${aug.status}`);
+  }
+
+  // Name with level, what the next level does, and its price.
+  refreshLevelRow(row, upgrade, level, maxLevel) {
+    const maxed = level >= maxLevel;
+    row.name.setText(`${upgrade.name} · ${level}/${maxLevel}`);
+    row.info.setText(maxed ? `${upgrade.describe(level)} (max)` : `Next: ${lowerFirst(upgrade.describe(level + 1))}`);
+    const price = maxed ? null : upgrade.prices[level];
+    this.setButton(row, maxed ? 'Max' : `$${price}`, !maxed && gameState.cash >= price);
   }
 }

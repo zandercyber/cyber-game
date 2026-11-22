@@ -214,10 +214,15 @@ export class HustleStation {
     return pay;
   }
 
-  /** Hands the whole desk pile to the player. Returns the amount taken. */
+  /** Hands the whole desk pile over. Returns the amount taken. */
   takePile() {
-    const amount = this.pile;
-    this.pile = 0;
+    return this.takeFromPile(Infinity);
+  }
+
+  /** Takes up to `max` from the pile (what fits in your hands). Returns the amount taken. */
+  takeFromPile(max) {
+    const amount = Math.min(this.pile, max);
+    this.pile -= amount;
     this.renderPile();
     return amount;
   }

@@ -2,6 +2,7 @@
 import * as Phaser from 'phaser';
 import { ITEMS, POWER_ITEMS, POWER_TIERS, SHOVEL_REFUND } from '../data/catalog.js';
 import { AUGUSTUS_UPGRADES } from '../data/augustus.js';
+import { PLAYER_UPGRADES } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
 import { ShopPanel } from '../ui/ShopPanel.js';
@@ -60,6 +61,8 @@ export class UIScene extends Phaser.Scene {
       getAugustus: () => this.dorm.augustusInfo(),
       onHire: () => this.dorm.hireAugustus(),
       onUpgrade: (kind) => this.dorm.buyUpgrade(kind),
+      getPlayerLevels: () => this.dorm.playerLevels,
+      onPlayerUpgrade: (kind) => this.dorm.buyPlayerUpgrade(kind),
     });
     this.shop.setVisible(this.dorm.shopOpen);
     const onShop = (open) => this.shop.setVisible(open);
@@ -96,10 +99,12 @@ export class UIScene extends Phaser.Scene {
     const onPower = (power) => this.showBanner('Power upgraded!', `${power.name}: up to ${power.capacity} W`);
     const onArrive = () => this.showBanner('Augustus has arrived!', 'He works your machines and carries cash to the hamper. Upgrade him in the shop.', PURPLE);
     const onUpgrade = (kind, level) => this.showBanner('Augustus upgraded!', `${AUGUSTUS_UPGRADES[kind].name} is now level ${level}.`, PURPLE);
+    const onPlayerUpgrade = (kind, level) => this.showBanner('Upgraded!', `${PLAYER_UPGRADES[kind].name}: ${PLAYER_UPGRADES[kind].describe(level).toLowerCase()}.`);
     this.dorm.events.on('breaker-tripped', onTrip);
     this.dorm.events.on('power-installed', onPower);
     this.dorm.events.on('augustus-arrived', onArrive);
     this.dorm.events.on('augustus-upgraded', onUpgrade);
+    this.dorm.events.on('player-upgraded', onPlayerUpgrade);
 
     this.renderCash(gameState.cash);
     this.renderPower(gameState.power);
@@ -114,6 +119,7 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('power-installed', onPower);
       this.dorm.events.off('augustus-arrived', onArrive);
       this.dorm.events.off('augustus-upgraded', onUpgrade);
+      this.dorm.events.off('player-upgraded', onPlayerUpgrade);
       this.dorm.events.off('question', onQuestion);
       this.input.keyboard.off('keydown', onKey);
     });

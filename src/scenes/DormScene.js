@@ -18,6 +18,7 @@ import { readSave, writeSave } from '../state/save.js';
 import { Augustus } from '../systems/Augustus.js';
 import { AUGUSTUS, AUGUSTUS_UPGRADES, MAX_LEVEL, noLevels } from '../data/augustus.js';
 import { QUESTIONS, QUESTION_CHANCE, QUESTION_GROUPS, groupForJobs } from '../data/questions.js';
+import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, playerStats, noPlayerLevels } from '../data/playerUpgrades.js';
 
 const ACCENT = 0x5ff0ff;
 const FONT = 'system-ui, sans-serif';
@@ -112,6 +113,11 @@ export class DormScene extends Phaser.Scene {
     // What you're holding (cash or one box), orders on the way, boxes at the door.
     this.carried = 0;
     this.carryStack = [];
+    this.playerLevels = noPlayerLevels(); // carry limit and speed, bought in the shop
+    // How much cash you're holding, shown over your head.
+    this.carryLabel = this.add.text(0, 0, '', {
+      fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#b8ffcf', stroke: '#0b0e14', strokeThickness: 4,
+    }).setOrigin(0.5, 1).setDepth(12100).setVisible(false);
     this.carryBox = null;
     this.orders = [];
     this.boxes = [];
@@ -249,13 +255,41 @@ export class DormScene extends Phaser.Scene {
     this.player.setWorking(working || this.resetting);
   }
 
-  collectFrom(station) {
+  /** Picks up a machine's cash pile, as much as fits in your hands (all: ignore the limit). */
+  collectFrom(station, { all = false } = {}) {
     if (this.carryBox) return; // hands are busy with a box; the cash waits
-    const amount = station.hustle.takePile();
-    if (amount <= 0) return;
-    this.carried += amount;
+    const pile = station.hustle.pile;
+    if (pile <= 0) return;
+    const room = all ? pile : Math.max(0, this.carryLimit - this.carried);
+    if (room <= 0) {
+      this.nudge(`Hands full ($${this.carryLimit} max): stash your cash first`, this.player.x, this.player.y - 150);
+      return;
+    }
+    this.carried += station.hustle.takeFromPile(room);
     this.player.setCarrying(true);
     this.rebuildCarryStack();
+    const left = station.hustle.pile;
+    if (left > 0) this.nudge(`Hands full: $${left} left on the machine`, this.player.x, this.player.y - 150);
+  }
+
+  get carryLimit() {
+    return playerStats(this.playerLevels).carryLimit;
+  }
+
+  /** Called by the shop: 'carry' or 'speed'. Returns true if it went through. */
+  buyPlayerUpgrade(kind) {
+    const upgrade = Object.hasOwn(PLAYER_UPGRADES, kind) ? PLAYER_UPGRADES[kind] : null;
+    if (!upgrade) return false;
+    const level = this.playerLevels[kind];
+    if (level >= PLAYER_MAX_LEVEL || !gameState.spend(upgrade.prices[level])) return false;
+    this.playerLevels = { ...this.playerLevels, [kind]: level + 1 };
+    this.applyPlayerStats();
+    this.events.emit('player-upgraded', kind, level + 1);
+    return true;
+  }
+
+  applyPlayerStats() {
+    this.player.speedMultiplier = playerStats(this.playerLevels).speedMultiplier;
   }
 
   // If you're broke and own nothing that earns, the laptop does hustles again
@@ -564,7 +598,7 @@ export class DormScene extends Phaser.Scene {
     if (!plot || !plot.itemId) return null;
     const itemId = plot.itemId;
     if (plot.station) {
-      this.collectFrom(plot.station);
+      this.collectFrom(plot.station, { all: true }); // nothing gets lost when it's dug up
       plot.station.hustle.destroy();
       this.stations.splice(this.stations.indexOf(plot.station), 1);
     }
@@ -868,6 +902,7 @@ export class DormScene extends Phaser.Scene {
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
       augustus: this.augustusState(),
       questionsSeen: this.questionsSeen,
+      playerLevels: this.playerLevels,
     });
   }
 
@@ -922,6 +957,8 @@ export class DormScene extends Phaser.Scene {
 
     if (save.tripped) this.trip({ silent: true });
     this.questionsSeen = save.questionsSeen;
+    this.playerLevels = { ...save.playerLevels };
+    this.applyPlayerStats();
     if (save.augustus) {
       const a = save.augustus;
       this.augustusLevels = { ...a.levels };
@@ -1002,6 +1039,14 @@ export class DormScene extends Phaser.Scene {
     });
     if (this.carryBox) {
       this.carryBox.sprite.setPosition(this.player.x + ox, this.player.y - 42).setDepth(depth);
+    }
+    const holding = this.carried > 0;
+    this.carryLabel.setVisible(holding);
+    if (holding) {
+      const full = this.carried >= this.carryLimit;
+      const text = full ? `$${this.carried} · hands full` : `$${this.carried} / $${this.carryLimit}`;
+      if (this.carryLabel.text !== text) this.carryLabel.setText(text).setColor(full ? '#fde68a' : '#b8ffcf');
+      this.carryLabel.setPosition(this.player.x + ox, this.player.y - 70 - this.carryStack.length * 8);
     }
     // Empty plots glow bigger while you hold a box, to show where it can go.
     const scale = this.carryBox && !isPower(this.carryBox.itemId) ? 1.08 : 1;

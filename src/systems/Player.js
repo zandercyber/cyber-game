@@ -1,7 +1,8 @@
 // The player character: movement, collision and animation.
 // Modes: normal, carrying (arms out, cash stack shown), working (typing, back view).
 
-const SPEED = 240; // world pixels per second at full stick
+const SPEED = 240; // world pixels per second at full stick (before speed upgrades)
+const MAX_SUBSTEP = 8; // move in small steps so fast walking can't clip through furniture
 const SCALE = 2; // sprite sheet frames are 32x52; drawn at 2x
 const FEET_ORIGIN_Y = 51 / 52; // feet sit on row 51 of each frame
 // Points around the feet that must all be on open floor (keeps the body off walls).
@@ -36,6 +37,7 @@ export class Player {
     this.moving = false;
     this.working = false;
     this.carrying = false;
+    this.speedMultiplier = 1; // the shop's speed upgrade
     this.sprite = scene.add.sprite(x, y, 'player', IDLE_FRAME[facing])
       .setOrigin(0.5, FEET_ORIGIN_Y)
       .setScale(SCALE);
@@ -58,14 +60,15 @@ export class Player {
     }
     this.working = false;
 
-    const step = SPEED * strength * dt;
-    const dx = (input.x / Math.hypot(input.x, input.y)) * step;
-    const dy = (input.y / Math.hypot(input.x, input.y)) * step;
-
-    this.moveWithSliding(dx, dy, step);
+    const step = SPEED * this.speedMultiplier * strength * dt;
+    const parts = Math.max(1, Math.ceil(step / MAX_SUBSTEP));
+    const len = Math.hypot(input.x, input.y);
+    const dx = (input.x / len) * (step / parts);
+    const dy = (input.y / len) * (step / parts);
+    for (let i = 0; i < parts; i++) this.moveWithSliding(dx, dy, step / parts);
 
     this.facing = this.pickFacing(input.x, input.y);
-    this.sprite.anims.timeScale = Math.max(0.5, strength);
+    this.sprite.anims.timeScale = Math.max(0.5, strength) * this.speedMultiplier;
     this.sprite.anims.play(`${this.carrying ? 'carry' : 'walk'}-${this.facing}`, true);
     this.moving = true;
     // Things lower on screen are closer to the camera, so they draw on top.

@@ -8,6 +8,7 @@
 import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
 import { AUGUSTUS, MAX_LEVEL, UPGRADE_IDS, augustusStats } from '../data/augustus.js';
 import { QUESTIONS } from '../data/questions.js';
+import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -109,6 +110,10 @@ export function readSave({ plotIds, pileMax }) {
     return [group, [...new Set(ok)]];
   }));
 
+  // Your own upgrade levels (carry limit, speed).
+  const rawLevels = obj(raw.playerLevels);
+  const playerLevels = Object.fromEntries(PLAYER_UPGRADE_IDS.map((k) => [k, int(rawLevels[k], 0, PLAYER_MAX_LEVEL)]));
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
@@ -124,6 +129,7 @@ export function readSave({ plotIds, pileMax }) {
     tripped: raw.tripped === true, // older saves don't have it: not tripped
     augustus,
     questionsSeen,
+    playerLevels,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {
