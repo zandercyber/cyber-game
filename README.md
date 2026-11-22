@@ -4,7 +4,7 @@ A tycoon-style cybersecurity simulator for the browser. Start in your dorm room,
 
 ## Status
 
-Prototype: work hustles at the corner desk, carry the cash to your stash (the laundry basket), and watch the machine's heat. Buying gear comes next.
+Prototype: work hustles at the corner desk and carry the cash to your stash (the laundry basket). At $100 the laptop becomes the shop: order gear, carry the delivery box to an empty plot, and your new machines earn money (hustles, bug bounties, or an AI agent business that runs on its own).
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 
@@ -32,7 +32,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now.
 
 ## Project structure
 

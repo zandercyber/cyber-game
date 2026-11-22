@@ -1,8 +1,9 @@
-// Heads-up display drawn on top of the room: cash, power meter, fullscreen button.
+// Heads-up display drawn on top of the room: cash, power meter, shop, buttons.
 import * as Phaser from 'phaser';
 import { POWER_TIERS } from '../data/catalog.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
+import { ShopPanel } from '../ui/ShopPanel.js';
 
 const PANEL_BG = 0x0b0e14;
 const ACCENT = '#5ff0ff';
@@ -37,6 +38,32 @@ export class UIScene extends Phaser.Scene {
     this.addFullscreenButton(width, height);
     this.addNewGameButton(height);
 
+    // Delivery status under the cash counter.
+    this.deliveryChip = this.add.text(20, 92, '', {
+      fontFamily: FONT, fontSize: '17px', fontStyle: 'bold', color: '#fde68a',
+      backgroundColor: '#0b0e14cc', padding: { x: 10, y: 6 },
+    }).setVisible(false);
+
+    // The shop screen opens while you stand at the laptop (after it unlocks).
+    this.dorm = this.scene.get('DormScene');
+    this.shop = new ShopPanel(this, {
+      onBuy: (itemId) => this.dorm.buy(itemId),
+      getOrders: () => this.dorm.orders,
+    });
+    this.shop.setVisible(this.dorm.shopOpen);
+    const onShop = (open) => this.shop.setVisible(open);
+    this.dorm.events.on('shop', onShop);
+    this.time.addEvent({
+      delay: 250,
+      loop: true,
+      callback: () => {
+        if (this.shop.visible) this.shop.refresh();
+        this.renderDeliveryChip();
+      },
+    });
+    const onUnlock = () => this.showBanner('Shop unlocked!', 'Your laptop now sells gear. Walk over to shop.');
+    gameState.on('shop-unlocked', onUnlock);
+
     this.renderCash(gameState.cash);
     this.renderPower(gameState.power);
     gameState.on('cash', this.renderCash, this);
@@ -44,11 +71,38 @@ export class UIScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       gameState.off('cash', this.renderCash, this);
       gameState.off('power', this.renderPower, this);
+      gameState.off('shop-unlocked', onUnlock);
+      this.dorm.events.off('shop', onShop);
     });
+  }
+
+  renderDeliveryChip() {
+    const { orders, boxes, carryBox } = this.dorm;
+    let text = '';
+    if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
+    else if (carryBox) text = 'Carry the box to an empty plot';
+    else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;
+    if (this.shop.visible) text = ''; // the shop lists deliveries itself
+    this.deliveryChip.setVisible(Boolean(text));
+    if (text && this.deliveryChip.text !== text) this.deliveryChip.setText(text);
+  }
+
+  // Big message across the top for a few seconds.
+  showBanner(title, subtitle) {
+    const { width } = this.scale;
+    const box = this.add.container(width / 2, 170).setDepth(40000);
+    const bg = this.add.rectangle(0, 0, 640, 104, 0x0b0e14, 0.95).setStrokeStyle(3, 0x4ade80, 0.9);
+    const t1 = this.add.text(0, -18, title, { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: '#4ade80' }).setOrigin(0.5);
+    const t2 = this.add.text(0, 26, subtitle, { fontFamily: FONT, fontSize: '19px', color: '#e6f4ff' }).setOrigin(0.5);
+    box.add([bg, t1, t2]);
+    box.setScale(0.6).setAlpha(0);
+    this.tweens.add({ targets: box, scale: 1, alpha: 1, duration: 300, ease: 'Back.out' });
+    this.tweens.add({ targets: box, alpha: 0, delay: 4000, duration: 500, onComplete: () => box.destroy() });
   }
 
   /** True if the pointer is on a HUD button, so the room ignores that tap. */
   isOverButton(pointer) {
+    if (this.shop?.contains(pointer)) return true;
     return (this.buttons ?? []).some((b) => b.visible && b.getBounds().contains(pointer.x, pointer.y));
   }
 
@@ -63,6 +117,7 @@ export class UIScene extends Phaser.Scene {
 
   renderCash(cash, change = 0) {
     this.cashText.setText(`$${cash.toLocaleString('en-US')}`);
+    if (this.shop?.visible) this.shop.refresh();
     if (change > 0) {
       // Little bump and a "+$N" that floats up from the counter.
       this.tweens.add({ targets: this.cashText, scale: { from: 1.25, to: 1 }, duration: 300, ease: 'Back.out' });

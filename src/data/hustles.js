@@ -1,6 +1,8 @@
-// Quick jobs you do at a workstation. Real-world help-desk and security tasks.
-// seconds: how long it takes at the starter desk; pay: cash it adds to the desk pile.
-export const STARTER_HUSTLES = [
+// Jobs that machines do, and how they heat up. Real help-desk and security work.
+// seconds: how long one job takes; pay: cash it adds to the machine's pile.
+
+// Quick help-desk gigs (starter desk and cheap laptops).
+export const HELPDESK_JOBS = [
   { name: 'Reset a locked account', seconds: 3, pay: 4 },
   { name: 'Set up 2FA for a neighbor', seconds: 3, pay: 4 },
   { name: 'Remove adware from a laptop', seconds: 4, pay: 6 },
@@ -10,13 +12,37 @@ export const STARTER_HUSTLES = [
   { name: 'Update an old Wi-Fi router', seconds: 5, pay: 8 },
 ];
 
+// Bug bounties (the dual-monitor workstation): slower jobs, bigger payouts.
+export const BOUNTY_JOBS = [
+  { name: 'Find a reflected XSS bug', seconds: 6, pay: 30 },
+  { name: 'Report an exposed cloud storage bucket', seconds: 5, pay: 22 },
+  { name: 'Find an IDOR in a shopping API', seconds: 7, pay: 40 },
+  { name: 'Spot SQL injection in a login form', seconds: 8, pay: 50 },
+  { name: 'Report a subdomain takeover', seconds: 6, pay: 28 },
+  { name: 'Find leaked API keys in a public repo', seconds: 5, pay: 25 },
+];
+
+// AI agent business (the server rack): runs on its own, no player needed.
+export const AGENT_JOBS = [
+  { name: 'AI agent triaging a client\'s alerts', seconds: 8, pay: 20 },
+  { name: 'AI agent summarizing threat intel', seconds: 8, pay: 18 },
+  { name: 'AI agent reviewing firewall logs', seconds: 10, pay: 26 },
+  { name: 'AI agent answering help-desk tickets', seconds: 9, pay: 22 },
+];
+
 // Heat: working warms the machine; at 100 it overheats and must fully cool down.
-export const STARTER_DESK_HEAT = {
-  perSecondWorking: 5, // ~20 s of work to overheat
-  perSecondCooling: 10, // ~10 s to cool from overheated
-  idleCooling: 6, // cooling while you're just away (not overheated)
+export const HEAT = {
+  starterDesk: { perSecondWorking: 5, perSecondCooling: 10, idleCooling: 6 }, // ~20 s of work
+  laptop: { perSecondWorking: 6, perSecondCooling: 10, idleCooling: 6 }, // ~17 s
+  workstation: { perSecondWorking: 4, perSecondCooling: 8, idleCooling: 5 }, // ~25 s
 };
 
-// Cash waits on the desk until you carry it to the stash. When the pile is
-// full, work pauses, so you have to keep moving.
+// The starter desk's cash pile cap. When a pile is full, that machine stops.
 export const STARTER_DESK_PILE_MAX = 40;
+
+// Stashed cash needed before the corner laptop turns into the shop.
+export const SHOP_UNLOCK_CASH = 100;
+
+// Kept for older imports.
+export const STARTER_HUSTLES = HELPDESK_JOBS;
+export const STARTER_DESK_HEAT = HEAT.starterDesk;

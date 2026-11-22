@@ -57,12 +57,39 @@ export function readSave({ plotIds, pileMax }) {
     }
   }
 
+  const obj = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+  const isItem = (id) => typeof id === 'string' && Object.hasOwn(ITEMS, id);
+  const station = (value, max) => {
+    const v = obj(value);
+    return { pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true };
+  };
+
+  // Per-machine piles and heat, only for plots that really hold an earning item.
+  const machines = {};
+  const rawMachines = obj(raw.machines);
+  for (const [plotId, itemId] of Object.entries(plots)) {
+    const earns = ITEMS[itemId].earns;
+    if (earns && Object.hasOwn(rawMachines, plotId)) machines[plotId] = station(rawMachines[plotId], earns.pileMax);
+  }
+
+  const orders = (Array.isArray(raw.orders) ? raw.orders : [])
+    .slice(0, 20)
+    .map(obj)
+    .filter((o) => isItem(o.itemId))
+    .map((o) => ({ itemId: o.itemId, remaining: num(o.remaining, 0, ITEMS[o.itemId].deliverySeconds) }));
+  const boxes = (Array.isArray(raw.boxes) ? raw.boxes : []).slice(0, 10).filter(isItem);
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
 
   return {
     cash: int(raw.cash, 0, MAX_CASH),
+    shopUnlocked: raw.shopUnlocked === true,
+    machines,
+    orders,
+    boxes,
+    carryBox: isItem(raw.carryBox) ? raw.carryBox : null,
     powerTier: int(raw.powerTier, 0, POWER_TIERS.length - 1),
     carried: int(raw.carried, 0, MAX_CASH),
     plots,

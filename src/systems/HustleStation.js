@@ -1,6 +1,6 @@
-// A workstation you stand at to do quick jobs ("hustles").
-// - Stand still at it and you work automatically; each job pays into a cash
-//   pile on the desk.
+// A machine that does jobs and pays into a cash pile next to it.
+// - 'work' machines: stand still at it and you work automatically.
+// - 'idle' machines: do jobs on their own while there's room in the pile.
 // - Working heats the machine. At 100% it overheats and must fully cool down,
 //   so you can't stay at one machine forever.
 // - When the pile is full, work pauses until you carry the cash away.
@@ -10,11 +10,14 @@ const FONT = 'system-ui, sans-serif';
 const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee' };
 
 export class HustleStation {
-  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax }) {
+  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1 }) {
     this.scene = scene;
     this.hustles = hustles;
-    this.heatCfg = heat;
+    this.heatCfg = heat; // null = this machine doesn't heat up
     this.pileMax = pileMax;
+    this.idle = idle;
+    this.payMultiplier = payMultiplier;
+    this.enabled = true; // the corner desk switches off when it becomes the shop
     this.screen = screen; // where the laptop screen is (for glow and steam)
     this.pilePos = pile; // where cash stacks up on the desk
 
@@ -37,11 +40,14 @@ export class HustleStation {
     const heatLabel = scene.add.text(-BAR_W / 2 - 8, 30, 'HEAT', {
       fontFamily: FONT, fontSize: '12px', fontStyle: 'bold', color: '#fbbf24',
     }).setOrigin(1, 0.5);
-    this.panel.add([this.title, barBg(14, 10), this.progressFill, barBg(30, 8), this.heatFill, heatLabel]);
+    this.panel.add([this.title, barBg(14, 10), this.progressFill]);
+    if (heat) this.panel.add([barBg(30, 8), this.heatFill, heatLabel]);
+    else { this.heatFill.destroy(); heatLabel.destroy(); }
 
-    // Red glow on the laptop screen while it's overheated.
-    this.glow = scene.add.rectangle(screen.x, screen.y, screen.w, screen.h, 0xff3b30, 0)
-      .setDepth(-9000);
+    // Red glow on the screen while it's overheated.
+    this.glow = screen && heat
+      ? scene.add.rectangle(screen.x, screen.y, screen.w, screen.h, 0xff3b30, 0).setDepth(screen.depth ?? -9000)
+      : null;
     this.steamTimer = 0;
 
     // Cash stacks on the desk.
@@ -66,6 +72,20 @@ export class HustleStation {
    */
   update(dt, { canWork, near, handsFull }) {
     const h = this.heatCfg;
+    if (!this.enabled) {
+      this.working = false;
+      this.panel.setVisible(false);
+      return false;
+    }
+    if (this.idle) {
+      // Runs on its own; the player isn't needed (or shown working).
+      if (!this.pileFull) {
+        this.progress += dt / this.job.seconds;
+        if (this.progress >= 1) this.finishJob();
+      }
+      this.render(dt, { near, handsFull: false });
+      return false;
+    }
     if (this.overheated) {
       this.heat = Math.max(0, this.heat - h.perSecondCooling * dt);
       if (this.heat === 0) this.overheated = false;
@@ -89,7 +109,7 @@ export class HustleStation {
   }
 
   finishJob() {
-    const pay = this.job.pay;
+    const pay = Math.round(this.job.pay * this.payMultiplier);
     this.pile = Math.min(this.pileMax, this.pile + pay);
     this.progress = 0;
     this.job = this.pickJob();
@@ -109,8 +129,10 @@ export class HustleStation {
   render(dt, { near, handsFull }) {
     this.panel.setVisible(near || this.overheated);
     this.progressFill.width = Math.min(1, this.progress) * BAR_W;
-    this.heatFill.width = (this.heat / 100) * BAR_W;
-    this.heatFill.fillColor = this.overheated || this.heat > 80 ? 0xef4444 : this.heat > 50 ? 0xf97316 : 0xf59e0b;
+    if (this.heatCfg) {
+      this.heatFill.width = (this.heat / 100) * BAR_W;
+      this.heatFill.fillColor = this.overheated || this.heat > 80 ? 0xef4444 : this.heat > 50 ? 0xf97316 : 0xf59e0b;
+    }
 
     let text = this.job.name;
     let bg = STATUS_COLORS.job;
@@ -121,26 +143,27 @@ export class HustleStation {
       text = 'Hands full: stash your cash first';
       bg = STATUS_COLORS.full;
     } else if (this.pileFull) {
-      text = 'Cash pile full: take it to your stash';
+      text = 'Cash pile full: collect it';
       bg = STATUS_COLORS.full;
     }
     if (this.title.text !== text) this.title.setText(text);
     this.title.setBackgroundColor(bg);
 
     // Overheat effects: pulsing red screen and steam puffs.
-    if (this.overheated) {
+    if (this.overheated && this.glow) {
       this.glow.setAlpha(0.25 + 0.2 * Math.sin(this.scene.time.now / 150));
       this.steamTimer -= dt;
       if (this.steamTimer <= 0) {
         this.steamTimer = 0.22;
         this.puff();
       }
-    } else {
+    } else if (this.glow) {
       this.glow.setAlpha(0);
     }
   }
 
   puff() {
+    if (!this.screen) return;
     const { x, y } = this.screen;
     const p = this.scene.add.circle(x + (Math.random() - 0.5) * 40, y - 10, 5 + Math.random() * 4, 0xdbe4ee, 0.75)
       .setDepth(12400);
@@ -158,10 +181,18 @@ export class HustleStation {
       const s = this.scene.add.image(this.pilePos.x + (i % 2) * 14, this.pilePos.y - Math.floor(i / 2) * 9, 'item-cash')
         .setScale(0.8)
         .setOrigin(0.5, 1)
-        .setDepth(-8999 + i);
+        .setDepth((this.pilePos.depth ?? -8999) + i);
       this.pileSprites.push(s);
     }
     while (this.pileSprites.length > wanted) this.pileSprites.pop().destroy();
+  }
+
+  /** Removes everything this station drew (for when its item is removed). */
+  destroy() {
+    this.panel.destroy();
+    this.glow?.destroy();
+    for (const s of this.pileSprites) s.destroy();
+    this.pileSprites = [];
   }
 
   floatText(text, x, y, color) {
