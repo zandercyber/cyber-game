@@ -3,7 +3,7 @@
 //
 // earns: how the item makes money once installed.
 //   mode 'work': stand at it to do jobs (hustles, bounties); it heats up.
-//   mode 'idle': it does jobs on its own.
+//   mode 'idle': it does jobs on its own (no item uses this now; Augustus works machines instead).
 //   jobs: which job list (see hustles.js); payMultiplier scales each job's pay;
 //   pileMax: cash it holds before it stops and you have to collect.
 
@@ -44,7 +44,8 @@ export const ITEMS = {
     watts: 900,
     deliverySeconds: 120,
     footprint: [[-83, -42], [-83, -71], [82, -71], [82, -51], [70, -43], [-8, -4], [-71, -35]],
-    earns: { mode: 'idle', jobs: 'agents', payMultiplier: 1, heat: null, pileMax: 300 },
+    // Best pay in the dorm (~10 $/s), so Augustus goes for it first.
+    earns: { mode: 'work', jobs: 'agents', payMultiplier: 4, heat: 'rack', pileMax: 300 },
   },
 };
 

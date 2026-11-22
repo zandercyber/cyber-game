@@ -70,22 +70,32 @@ export class HustleStation {
     return next;
   }
 
+  /** Average cash per second while worked (helpers use it to pick machines). */
+  get payRate() {
+    const pay = this.hustles.reduce((sum, j) => sum + j.pay, 0);
+    const seconds = this.hustles.reduce((sum, j) => sum + j.seconds, 0);
+    return (pay * this.payMultiplier) / seconds;
+  }
+
   get pileFull() {
     return this.pile >= this.pileMax;
   }
 
   /**
-   * Advances work and heat. canWork: the player is standing at the desk with
-   * free hands. Returns true while the player should be shown typing.
+   * Advances work and heat. canWork: someone is working it (the player
+   * standing at it with free hands, or a helper like Augustus).
+   * rate: job speed (1 = the player); bonus: pay multiplier for finished jobs;
+   * helper: true when a helper is the one working (helpers don't repair).
+   * Returns true while someone is working it.
    */
-  update(dt, { canWork, near, handsFull }) {
+  update(dt, { canWork, near, handsFull, rate = 1, bonus = 1, helper = false }) {
     const h = this.heatCfg;
     if (!this.enabled) {
       this.working = false;
       this.panel.setVisible(false);
       return false;
     }
-    if (this.broken) return this.updateBroken(dt, { canWork, near, handsFull });
+    if (this.broken) return this.updateBroken(dt, { canWork: canWork && !helper, near, handsFull });
     if (!this.powered) {
       // No power: no work, no progress. It only cools down.
       this.working = false;
@@ -100,7 +110,7 @@ export class HustleStation {
       // Runs on its own; the player isn't needed (or shown working).
       if (!this.pileFull) {
         this.progress += dt / this.job.seconds;
-        if (this.progress >= 1) this.finishJob();
+        if (this.progress >= 1) this.finishJob(bonus);
       }
       this.render(dt, { near, handsFull: false });
       return false;
@@ -111,16 +121,16 @@ export class HustleStation {
       this.working = false;
     } else if (canWork && !this.pileFull) {
       this.working = true;
-      this.progress += dt / this.job.seconds;
-      this.heat = Math.min(100, this.heat + h.perSecondWorking * dt);
-      if (this.progress >= 1) this.finishJob();
-      if (this.heat >= 100) {
+      this.progress += (dt * rate) / this.job.seconds;
+      if (h) this.heat = Math.min(100, this.heat + h.perSecondWorking * dt);
+      if (this.progress >= 1) this.finishJob(bonus);
+      if (h && this.heat >= 100) {
         this.overheated = true;
         this.working = false;
       }
     } else {
       this.working = false;
-      this.heat = Math.max(0, this.heat - h.idleCooling * dt);
+      if (h) this.heat = Math.max(0, this.heat - h.idleCooling * dt);
     }
 
     this.render(dt, { near, handsFull });
@@ -161,8 +171,8 @@ export class HustleStation {
     }
   }
 
-  finishJob() {
-    const pay = Math.round(this.job.pay * this.payMultiplier);
+  finishJob(bonus = 1) {
+    const pay = Math.round(this.job.pay * this.payMultiplier * bonus);
     this.pile = Math.min(this.pileMax, this.pile + pay);
     this.progress = 0;
     this.job = this.pickJob();

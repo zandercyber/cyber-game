@@ -22,7 +22,7 @@ export const BOUNTY_JOBS = [
   { name: 'Find leaked API keys in a public repo', seconds: 5, pay: 25 },
 ];
 
-// AI agent business (the server rack): runs on its own, no player needed.
+// AI agent business (the server rack): you or Augustus run the agents.
 export const AGENT_JOBS = [
   { name: 'AI agent triaging a client\'s alerts', seconds: 8, pay: 20 },
   { name: 'AI agent summarizing threat intel', seconds: 8, pay: 18 },
@@ -35,6 +35,7 @@ export const HEAT = {
   starterDesk: { perSecondWorking: 5, perSecondCooling: 10, idleCooling: 6 }, // ~20 s of work
   laptop: { perSecondWorking: 6, perSecondCooling: 10, idleCooling: 6 }, // ~17 s
   workstation: { perSecondWorking: 4, perSecondCooling: 8, idleCooling: 5 }, // ~25 s
+  rack: { perSecondWorking: 3, perSecondCooling: 8, idleCooling: 5 }, // ~33 s
 };
 
 // The starter desk's cash pile cap. When a pile is full, that machine stops.

@@ -15,6 +15,8 @@ import {
   HELPDESK_JOBS, BOUNTY_JOBS, AGENT_JOBS, HEAT, STARTER_DESK_PILE_MAX, SHOP_UNLOCK_CASH,
 } from '../data/hustles.js';
 import { readSave, writeSave } from '../state/save.js';
+import { Augustus } from '../systems/Augustus.js';
+import { AUGUSTUS, AUGUSTUS_UPGRADES, MAX_LEVEL, noLevels } from '../data/augustus.js';
 
 const ACCENT = 0x5ff0ff;
 const FONT = 'system-ui, sans-serif';
@@ -42,6 +44,7 @@ export class DormScene extends Phaser.Scene {
   preload() {
     this.load.image(DORM.background, asset('rooms/dorm.jpg'));
     this.load.spritesheet('player', asset('player/zander.png'), { frameWidth: 32, frameHeight: 52 });
+    this.load.spritesheet('augustus', asset('augustus/augustus.png'), { frameWidth: 20, frameHeight: 26 });
     for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, asset(item.file));
     for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, asset(file));
   }
@@ -51,6 +54,7 @@ export class DormScene extends Phaser.Scene {
 
     // Pixel art stays crisp when scaled up; the painted room stays smooth.
     this.textures.get('player').setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.textures.get('augustus').setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     // Everything feet can't enter. Installing an item adds its footprint here,
     // and the walk check below always reads the current list.
@@ -116,6 +120,12 @@ export class DormScene extends Phaser.Scene {
     gameState.on('cash', this.checkShopUnlock, this);
     this.events.once('shutdown', () => gameState.off('cash', this.checkShopUnlock, this));
 
+    // AI agent helpers (Augustus for now). A list, so more can join later.
+    this.agents = [];
+    this.augustusHired = false;
+    this.augustusArrival = null; // seconds until he floats in after hiring
+    this.augustusLevels = noLevels();
+
     // Pick up where you left off, then keep saving automatically.
     this.restoreProgress();
     this.setupAutosave();
@@ -143,6 +153,7 @@ export class DormScene extends Phaser.Scene {
     this.tryInstall();
     this.updateBreaker(dt);
     this.updateLights();
+    this.updateAgents(dt);
     this.updateStations(dt);
     this.updateShopOpen();
     this.updateCarryVisuals();
@@ -211,14 +222,21 @@ export class DormScene extends Phaser.Scene {
       }
     }
 
+    // Machines Augustus (or another agent) is working this frame.
+    const helpers = new Map(this.agents.filter((a) => a.workingStation).map((a) => [a.workingStation, a]));
     let working = false;
     for (const st of this.stations) {
       const atThis = st === workTarget;
-      working = st.hustle.update(dt, {
-        canWork: atThis && still && !this.handsFull,
-        near: st.near,
+      const helper = atThis ? undefined : helpers.get(st);
+      const busy = st.hustle.update(dt, {
+        canWork: (atThis && still && !this.handsFull) || Boolean(helper),
+        near: st.near || Boolean(helper),
         handsFull: atThis && this.handsFull,
-      }) || working;
+        rate: helper?.workRate ?? 1,
+        bonus: helper?.payBonus ?? 1,
+        helper: Boolean(helper),
+      });
+      if (busy && atThis) working = true;
     }
     this.player.setWorking(working || this.resetting);
   }
@@ -242,6 +260,68 @@ export class DormScene extends Phaser.Scene {
     if (ownsEarner || machineComing) return false;
     const cheapest = Math.min(...Object.values(ITEMS).filter((i) => i.earns).map((i) => i.price));
     return gameState.cash + this.carried < cheapest;
+  }
+
+  // ---------- Augustus (AI agent helpers) ----------
+
+  updateAgents(dt) {
+    if (this.augustusArrival !== null) {
+      this.augustusArrival -= dt;
+      if (this.augustusArrival <= 0) {
+        this.augustusArrival = null;
+        this.augustusHired = true;
+        const { x, y } = DORM.deliverySpot;
+        this.spawnAugustus({ x, y: y + 20, arriving: true });
+        this.events.emit('augustus-arrived');
+      }
+    }
+    for (const agent of this.agents) agent.update(dt);
+  }
+
+  spawnAugustus(opts) {
+    const agent = new Augustus(this, { ...opts, levels: this.augustusLevels });
+    this.agents.push(agent);
+    return agent;
+  }
+
+  /** Called by the shop. Returns true if he's hired. */
+  hireAugustus() {
+    if (!gameState.shopUnlocked || this.augustusHired || this.augustusArrival !== null) return false;
+    if (!gameState.spend(AUGUSTUS.hirePrice)) return false;
+    this.augustusArrival = AUGUSTUS.arriveSeconds;
+    return true;
+  }
+
+  /** Called by the shop: speed, profit or energy. Returns true if it went through. */
+  buyUpgrade(kind) {
+    const upgrade = Object.hasOwn(AUGUSTUS_UPGRADES, kind) ? AUGUSTUS_UPGRADES[kind] : null;
+    if (!upgrade || !this.augustusHired) return false;
+    const level = this.augustusLevels[kind];
+    if (level >= MAX_LEVEL || !gameState.spend(upgrade.prices[level])) return false;
+    this.augustusLevels = { ...this.augustusLevels, [kind]: level + 1 };
+    for (const agent of this.agents) agent.setLevels(this.augustusLevels);
+    this.events.emit('augustus-upgraded', kind, level + 1);
+    return true;
+  }
+
+  /** What the shop's Upgrades tab shows. */
+  augustusInfo() {
+    return {
+      hired: this.augustusHired,
+      arriving: this.augustusArrival,
+      levels: this.augustusLevels,
+      status: this.agents[0]?.status ?? '',
+    };
+  }
+
+  // An agent dropping cash in the hamper.
+  stashFromHelper(agent, amount) {
+    gameState.addCash(amount);
+    this.floatText(`+$${amount}`, DORM.stash.x + 30, DORM.stash.y - 90, '#b8ffcf');
+  }
+
+  itemName(id) {
+    return orderable(id)?.name ?? id;
   }
 
   // ---------- Shop, orders and deliveries ----------
@@ -730,7 +810,23 @@ export class DormScene extends Phaser.Scene {
       orders: this.orders.map((o) => ({ itemId: o.itemId, remaining: Math.ceil(o.remaining) })),
       boxes: this.boxes.map((b) => b.itemId),
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
+      augustus: this.augustusState(),
     });
+  }
+
+  augustusState() {
+    if (!this.augustusHired && this.augustusArrival === null) return null;
+    const a = this.agents[0];
+    return {
+      hired: this.augustusHired,
+      arriving: this.augustusArrival === null ? null : Math.ceil(this.augustusArrival),
+      levels: this.augustusLevels,
+      awake: Math.round(a?.awake ?? 0),
+      nap: Math.ceil(a?.nap ?? 0),
+      carried: a?.carried ?? 0,
+      x: Math.round(a?.x ?? 0),
+      y: Math.round(a?.y ?? 0),
+    };
   }
 
   stationState(station) {
@@ -768,6 +864,18 @@ export class DormScene extends Phaser.Scene {
     this.player.facing = save.player?.facing ?? this.player.facing;
 
     if (save.tripped) this.trip({ silent: true });
+    if (save.augustus) {
+      const a = save.augustus;
+      this.augustusLevels = { ...a.levels };
+      if (a.hired) {
+        this.augustusHired = true;
+        const ok = a.position && this.player.canStandAt(a.position.x, a.position.y);
+        const { x, y } = ok ? a.position : { x: DORM.deliverySpot.x, y: DORM.deliverySpot.y + 20 };
+        this.spawnAugustus({ x, y, awake: a.awake, nap: a.nap, carried: a.carried });
+      } else {
+        this.augustusArrival = a.arriving;
+      }
+    }
     this.restoreStation(this.deskStation, save.desk);
     this.orders = save.orders.map((o) => ({ ...o }));
     for (const itemId of save.boxes) this.spawnBox(itemId);
@@ -936,7 +1044,7 @@ export class DormScene extends Phaser.Scene {
   // ---------- Debug (?debug or #debug) ----------
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
-  // U unlock the shop, D deliver all orders now.
+  // U unlock the shop, D deliver all orders now, G hire Augustus now.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -954,6 +1062,9 @@ export class DormScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-P', () => gameState.setPowerTier((gameState.powerTier + 1) % POWER_TIERS.length));
     this.input.keyboard.on('keydown-U', () => this.checkShopUnlock(Infinity));
     this.input.keyboard.on('keydown-D', () => { for (const o of this.orders) o.remaining = 0; });
+    this.input.keyboard.on('keydown-G', () => { // Augustus, free and right now
+      if (!this.augustusHired && this.augustusArrival === null) this.augustusArrival = 0.1;
+    });
     this.drawDebug();
   }
 
