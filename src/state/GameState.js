@@ -9,6 +9,13 @@ class GameState extends Phaser.Events.EventEmitter {
     this.powerTier = 0;
     this.powerUsed = 0;
     this.shopUnlocked = false; // the corner laptop turns into the shop at $100
+    this.tripped = false; // breaker tripped: machines are off until it's reset
+  }
+
+  setTripped(on) {
+    if (on === this.tripped) return;
+    this.tripped = on;
+    this.emit('power', this.power);
   }
 
   unlockShop() {
@@ -19,7 +26,7 @@ class GameState extends Phaser.Events.EventEmitter {
 
   get power() {
     const tier = POWER_TIERS[this.powerTier];
-    return { used: this.powerUsed, capacity: tier.capacity, tierName: tier.name };
+    return { used: this.powerUsed, capacity: tier.capacity, tierName: tier.name, tripped: this.tripped };
   }
 
   addCash(amount) {

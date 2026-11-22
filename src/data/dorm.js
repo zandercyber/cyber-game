@@ -49,7 +49,7 @@ export const DORM = {
   },
 
   // Breaker panel on the right wall: reset it when too much power trips the breaker.
-  breaker: { x: 1255, y: 500, reach: 85, labelX: 1290, labelY: 268 },
+  breaker: { x: 1255, y: 500, reach: 85, labelX: 1262, labelY: 268, panelX: 1322, panelY: 342 },
 
   // Deliveries show up here, just inside the door.
   deliverySpot: { x: 812, y: 395 },

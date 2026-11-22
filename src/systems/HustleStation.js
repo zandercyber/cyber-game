@@ -4,6 +4,7 @@
 // - Working heats the machine. At 100% it overheats and must fully cool down,
 //   so you can't stay at one machine forever.
 // - When the pile is full, work pauses until you carry the cash away.
+// - With no power (breaker tripped) nothing runs; the machine just cools.
 
 const BAR_W = 170;
 const FONT = 'system-ui, sans-serif';
@@ -18,6 +19,7 @@ export class HustleStation {
     this.idle = idle;
     this.payMultiplier = payMultiplier;
     this.enabled = true; // the corner desk switches off when it becomes the shop
+    this.powered = true; // false while the breaker is tripped
     this.screen = screen; // where the laptop screen is (for glow and steam)
     this.pilePos = pile; // where cash stacks up on the desk
 
@@ -77,6 +79,16 @@ export class HustleStation {
       this.panel.setVisible(false);
       return false;
     }
+    if (!this.powered) {
+      // No power: no work, no progress. It only cools down.
+      this.working = false;
+      if (h) {
+        this.heat = Math.max(0, this.heat - (this.overheated ? h.perSecondCooling : h.idleCooling) * dt);
+        if (this.heat === 0) this.overheated = false;
+      }
+      this.render(dt, { near, handsFull: false });
+      return false;
+    }
     if (this.idle) {
       // Runs on its own; the player isn't needed (or shown working).
       if (!this.pileFull) {
@@ -127,7 +139,7 @@ export class HustleStation {
   }
 
   render(dt, { near, handsFull }) {
-    this.panel.setVisible(near || this.overheated);
+    this.panel.setVisible(near || (this.overheated && this.powered));
     this.progressFill.width = Math.min(1, this.progress) * BAR_W;
     if (this.heatCfg) {
       this.heatFill.width = (this.heat / 100) * BAR_W;
@@ -136,7 +148,10 @@ export class HustleStation {
 
     let text = this.job.name;
     let bg = STATUS_COLORS.job;
-    if (this.overheated) {
+    if (!this.powered) {
+      text = 'No power: reset the breaker';
+      bg = STATUS_COLORS.hot;
+    } else if (this.overheated) {
       text = `Overheated! Cooling down… ${Math.ceil(this.heat / this.heatCfg.perSecondCooling)}s`;
       bg = STATUS_COLORS.hot;
     } else if (handsFull) {
@@ -150,7 +165,7 @@ export class HustleStation {
     this.title.setBackgroundColor(bg);
 
     // Overheat effects: pulsing red screen and steam puffs.
-    if (this.overheated && this.glow) {
+    if (this.overheated && this.powered && this.glow) {
       this.glow.setAlpha(0.25 + 0.2 * Math.sin(this.scene.time.now / 150));
       this.steamTimer -= dt;
       if (this.steamTimer <= 0) {
