@@ -56,7 +56,7 @@ export const POWER_TIERS = [
   { id: 'power-strip', name: 'Power strip', capacity: 900, price: 60, deliverySeconds: 10, icon: 'item-power-strip' },
   { id: 'surge-protector', name: 'Surge protector', capacity: 1500, price: 200, deliverySeconds: 20, icon: 'item-surge-protector' },
   { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 600, deliverySeconds: 40, icon: 'item-ups' },
-  { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, deliverySeconds: 60, icon: null },
+  { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, deliverySeconds: 60, icon: 'item-dedicated-circuit' },
 ];
 
 // Power upgrades by id (everything after the starting wall outlet), with their tier number.
@@ -79,8 +79,13 @@ export const SMALL_IMAGES = {
   'item-power-strip': 'items/power-strip.png',
   'item-surge-protector': 'items/surge-protector.png',
   'item-ups': 'items/ups.png',
+  'item-dedicated-circuit': 'items/dedicated-circuit.png',
   'item-shovel': 'items/shovel.png',
 };
 
 // Share of the price you get back when you shovel an item out of a plot.
 export const SHOVEL_REFUND = 0.25;
+
+// The corner laptop is always plugged in, so it counts against your power supply.
+// (When the breaker trips it keeps going on its battery.)
+export const STARTER_LAPTOP_WATTS = 60;

@@ -68,9 +68,14 @@ export class UIScene extends Phaser.Scene {
     });
     const onUnlock = () => this.showBanner('Shop unlocked!', 'Your laptop now sells gear. Walk over to shop.');
     gameState.on('shop-unlocked', onUnlock);
-    const onTrip = ({ again, used, capacity }) => {
-      if (again) this.showBanner('Tripped again!', 'Still too many watts. Remove a machine or upgrade power.', RED);
-      else this.showBanner('Breaker tripped!', `${used} W is over your ${capacity} W limit. Reset it at the panel.`, RED);
+    const onTrip = ({ again, fried, used, capacity }) => {
+      const what = fried.length ? ` The surge fried your ${fried.join(' and ')}!` : '';
+      if (again) {
+        this.showBanner('Tripped again!', `Still over the limit.${what} Remove a machine or upgrade power.`, RED);
+      } else {
+        const fix = fried.length ? 'Reset the breaker, then repair it.' : 'Reset it at the breaker panel.';
+        this.showBanner('Breaker tripped!', `${used} W is over your ${capacity} W limit.${what} ${fix}`, RED);
+      }
     };
     const onPower = (power) => this.showBanner('Power upgraded!', `${power.name}: up to ${power.capacity} W`);
     this.dorm.events.on('breaker-tripped', onTrip);
@@ -91,9 +96,10 @@ export class UIScene extends Phaser.Scene {
   }
 
   renderDeliveryChip() {
-    const { orders, boxes, carryBox } = this.dorm;
+    const { orders, boxes, carryBox, friedCount } = this.dorm;
     let text = '';
-    if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
+    if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
+    else if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
     else if (carryBox) text = Object.hasOwn(POWER_ITEMS, carryBox.itemId) ? 'Take the box to the breaker panel' : 'Carry the box to an empty plot';
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;
     if (this.shop.visible) text = ''; // the shop lists deliveries itself
@@ -107,9 +113,14 @@ export class UIScene extends Phaser.Scene {
     this.banner?.destroy(); // newest message wins
     const box = this.add.container(width / 2, 170).setDepth(40000);
     this.banner = box;
-    const bg = this.add.rectangle(0, 0, 640, 104, 0x0b0e14, 0.95).setStrokeStyle(3, color, 0.9);
     const t1 = this.add.text(0, -18, title, { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: css(color) }).setOrigin(0.5);
-    const t2 = this.add.text(0, 26, subtitle, { fontFamily: FONT, fontSize: '19px', color: '#e6f4ff' }).setOrigin(0.5);
+    const t2 = this.add.text(0, 14, subtitle, {
+      fontFamily: FONT, fontSize: '19px', color: '#e6f4ff', align: 'center', wordWrap: { width: 600 },
+    }).setOrigin(0.5, 0);
+    // Size the box to the text, so a subtitle that wraps onto two lines still fits.
+    const top = -52;
+    const h = 14 - top + t2.height + 16;
+    const bg = this.add.rectangle(0, top + h / 2, 640, h, 0x0b0e14, 0.95).setStrokeStyle(3, color, 0.9);
     box.add([bg, t1, t2]);
     box.setScale(0.6).setAlpha(0);
     this.tweens.add({ targets: box, scale: 1, alpha: 1, duration: 300, ease: 'Back.out' });

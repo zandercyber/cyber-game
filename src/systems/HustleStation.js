@@ -5,13 +5,16 @@
 //   so you can't stay at one machine forever.
 // - When the pile is full, work pauses until you carry the cash away.
 // - With no power (breaker tripped) nothing runs; the machine just cools.
+// - A power surge can fry it. A fried machine smokes and earns nothing until
+//   you stand at it (with the power on) to repair it.
 
 const BAR_W = 170;
 const FONT = 'system-ui, sans-serif';
 const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee' };
+const REPAIR_SECONDS = 3;
 
 export class HustleStation {
-  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1 }) {
+  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1, sprite = null }) {
     this.scene = scene;
     this.hustles = hustles;
     this.heatCfg = heat; // null = this machine doesn't heat up
@@ -20,6 +23,9 @@ export class HustleStation {
     this.payMultiplier = payMultiplier;
     this.enabled = true; // the corner desk switches off when it becomes the shop
     this.powered = true; // false while the breaker is tripped
+    this.sprite = sprite; // the machine's picture (darkened while fried)
+    this.broken = false; // fried by a power surge
+    this.repairProgress = 0;
     this.screen = screen; // where the laptop screen is (for glow and steam)
     this.pilePos = pile; // where cash stacks up on the desk
 
@@ -79,6 +85,7 @@ export class HustleStation {
       this.panel.setVisible(false);
       return false;
     }
+    if (this.broken) return this.updateBroken(dt, { canWork, near, handsFull });
     if (!this.powered) {
       // No power: no work, no progress. It only cools down.
       this.working = false;
@@ -120,6 +127,40 @@ export class HustleStation {
     return this.working;
   }
 
+  // Fried: smokes and cools. Standing at it with the power on repairs it.
+  updateBroken(dt, { canWork, near, handsFull }) {
+    const h = this.heatCfg;
+    if (h) {
+      this.heat = Math.max(0, this.heat - (this.overheated ? h.perSecondCooling : h.idleCooling) * dt);
+      if (this.heat === 0) this.overheated = false;
+    }
+    this.working = this.powered && canWork;
+    if (this.working) {
+      this.repairProgress += dt / REPAIR_SECONDS;
+      if (this.repairProgress >= 1) this.setBroken(false);
+    }
+    this.render(dt, { near, handsFull });
+    return this.working;
+  }
+
+  /** Fries or repairs the machine. quiet: no effects (used when loading a save). */
+  setBroken(on, { quiet = false } = {}) {
+    this.broken = on;
+    this.repairProgress = 0;
+    this.working = false;
+    if (on) {
+      this.progress = 0; // the job it was doing is lost
+      this.sprite?.setTint(0x6b6b6b);
+      if (!quiet) this.floatText('FRIED!', this.panel.x, this.panel.y - 40, '#f87171');
+    } else {
+      this.sprite?.clearTint();
+      if (!quiet) {
+        this.floatText('Fixed!', this.panel.x, this.panel.y - 40, '#4ade80');
+        this.scene.events.emit('machine-repaired');
+      }
+    }
+  }
+
   finishJob() {
     const pay = Math.round(this.job.pay * this.payMultiplier);
     this.pile = Math.min(this.pileMax, this.pile + pay);
@@ -139,8 +180,9 @@ export class HustleStation {
   }
 
   render(dt, { near, handsFull }) {
-    this.panel.setVisible(near || (this.overheated && this.powered));
-    this.progressFill.width = Math.min(1, this.progress) * BAR_W;
+    this.panel.setVisible(near || this.broken || (this.overheated && this.powered));
+    this.progressFill.width = Math.min(1, this.broken ? this.repairProgress : this.progress) * BAR_W;
+    this.progressFill.fillColor = this.broken ? 0xf97316 : 0x5ff0ff;
     if (this.heatCfg) {
       this.heatFill.width = (this.heat / 100) * BAR_W;
       this.heatFill.fillColor = this.overheated || this.heat > 80 ? 0xef4444 : this.heat > 50 ? 0xf97316 : 0xf59e0b;
@@ -148,7 +190,14 @@ export class HustleStation {
 
     let text = this.job.name;
     let bg = STATUS_COLORS.job;
-    if (!this.powered) {
+    if (this.broken) {
+      if (!near) text = 'FRIED'; // short from afar, so several fried machines don't clutter the room
+      else if (!this.powered) text = 'Fried! Reset the breaker first';
+      else if (this.repairProgress > 0) text = `Repairing… ${Math.floor(this.repairProgress * 100)}%`;
+      else if (handsFull) text = 'Fried! Free your hands to repair';
+      else text = 'Fried! Stand here to repair';
+      bg = STATUS_COLORS.hot;
+    } else if (!this.powered) {
       text = 'No power: reset the breaker';
       bg = STATUS_COLORS.hot;
     } else if (this.overheated) {
@@ -175,12 +224,24 @@ export class HustleStation {
     } else if (this.glow) {
       this.glow.setAlpha(0);
     }
+    // Fried: dark smoke.
+    if (this.broken) {
+      this.steamTimer -= dt;
+      if (this.steamTimer <= 0) {
+        this.steamTimer = 0.25;
+        this.puff(0x71717a, 8, true);
+      }
+    }
   }
 
-  puff() {
+  puff(color = 0xdbe4ee, size = 5, fromBody = false) {
     if (!this.screen) return;
-    const { x, y } = this.screen;
-    const p = this.scene.add.circle(x + (Math.random() - 0.5) * 40, y - 10, 5 + Math.random() * 4, 0xdbe4ee, 0.75)
+    // Steam comes off the screen; smoke billows from the middle of the machine
+    // (so it doesn't hide behind the info panel above it).
+    const body = fromBody && this.sprite;
+    const x = body ? this.sprite.x : this.screen.x;
+    const y = body ? this.sprite.y - this.sprite.height * 0.5 : this.screen.y;
+    const p = this.scene.add.circle(x + (Math.random() - 0.5) * 50, y - 10, size + Math.random() * size * 0.8, color, 0.8)
       .setDepth(12400);
     this.scene.tweens.add({
       targets: p, y: p.y - 45, alpha: 0, scale: 1.8, duration: 1100, ease: 'Sine.out',

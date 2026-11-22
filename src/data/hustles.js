@@ -41,7 +41,7 @@ export const HEAT = {
 export const STARTER_DESK_PILE_MAX = 40;
 
 // Stashed cash needed before the corner laptop turns into the shop.
-export const SHOP_UNLOCK_CASH = 100;
+export const SHOP_UNLOCK_CASH = 50;
 
 // Kept for older imports.
 export const STARTER_HUSTLES = HELPDESK_JOBS;
