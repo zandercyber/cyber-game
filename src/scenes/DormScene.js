@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { DORM } from '../data/dorm.js';
 import {
-  ITEMS, POWER_TIERS, POWER_ITEMS, SMALL_IMAGES, SHOVEL_REFUND, orderable,
+  ITEMS, POWER_TIERS, POWER_ITEMS, SMALL_IMAGES, SHOVEL_REFUND, STARTER_LAPTOP_WATTS, orderable,
 } from '../data/catalog.js';
 import { makeWalkableCheck, translatePolygon, centerY, pointInPolygon } from '../systems/geometry.js';
 import { Joystick } from '../systems/Joystick.js';
@@ -22,9 +22,16 @@ const JOB_LISTS = { helpdesk: HELPDESK_JOBS, bounty: BOUNTY_JOBS, agents: AGENT_
 // Where delivery boxes land, relative to the delivery spot by the door.
 const BOX_OFFSETS = [[0, 12], [-58, 32], [58, 32], [-30, 62], [30, 62], [0, 92]];
 const BOX_REACH = 52;
-const TRIP_DELAY = 0.8; // seconds over the limit before the breaker trips
+const TRIP_DELAY = 1.2; // seconds over the limit (lights flickering) before the breaker trips
 const RESET_SECONDS = 1.5; // how long you stand at the panel to reset it
 const DIM = 0.32; // how dark the room gets while the power is out
+const LOAD_GRACE = 5; // seconds: a save that's over the limit trips on load, but fries nothing
+// Light flicker patterns: [ms from start, darkness]. Kept to 2 flashes a
+// second at most, so the flicker stays safe for players sensitive to flashing.
+const BROWNOUT = [[0, 0.22], [160, 0.03], [600, 0.26], [760, 0.03]]; // over the limit, about to trip
+const OUTAGE_FLICKER = [[0, 0.14], [120, DIM], [330, 0.2], [430, DIM]]; // tripped: lights try to come on
+const LIGHTS_ON = [[0, 0.04], [90, 0.2], [260, 0]]; // reset: lights stutter back on
+const stepAt = (steps, t) => steps.reduce((value, [ms, alpha]) => (t >= ms ? alpha : value), steps[0][1]);
 const isPower = (id) => typeof id === 'string' && Object.hasOwn(POWER_ITEMS, id);
 
 export class DormScene extends Phaser.Scene {
@@ -124,6 +131,7 @@ export class DormScene extends Phaser.Scene {
 
   update(_time, delta) {
     const dt = Math.min(delta, 50) / 1000; // cap so a lag spike can't teleport you through walls
+    this.playTime += dt;
     let input = this.readInput();
     if (input.x !== 0 || input.y !== 0) this.clearMoveTarget(); // manual control wins
     else if (this.moveTarget) input = this.steerToTarget(dt);
@@ -134,6 +142,7 @@ export class DormScene extends Phaser.Scene {
     this.updateBoxes();
     this.tryInstall();
     this.updateBreaker(dt);
+    this.updateLights();
     this.updateStations(dt);
     this.updateShopOpen();
     this.updateCarryVisuals();
@@ -173,6 +182,7 @@ export class DormScene extends Phaser.Scene {
       pileMax: earns.pileMax,
       idle: earns.mode === 'idle',
       payMultiplier: earns.payMultiplier,
+      sprite: plot.sprite,
     });
     // You stand in front of the machine (below it on screen) to work or collect.
     const spot = { x: plot.x, y: plot.y + 72, reach: earns.mode === 'idle' ? 110 : 80 };
@@ -194,7 +204,8 @@ export class DormScene extends Phaser.Scene {
       const near = dist < st.spot.reach;
       if (st.near && !near) this.collectFrom(st); // walking away takes its cash
       st.near = near;
-      if (near && !st.hustle.idle && st.hustle.enabled && dist < bestDist) {
+      const workable = !st.hustle.idle || st.hustle.broken; // idle machines only need you to repair them
+      if (near && workable && st.hustle.enabled && dist < bestDist) {
         workTarget = st;
         bestDist = dist;
       }
@@ -430,7 +441,7 @@ export class DormScene extends Phaser.Scene {
   }
 
   updatePowerUsage() {
-    const watts = this.plots.reduce((sum, p) => sum + (p.itemId ? ITEMS[p.itemId].watts : 0), 0);
+    const watts = this.plots.reduce((sum, p) => sum + (p.itemId ? ITEMS[p.itemId].watts : 0), STARTER_LAPTOP_WATTS);
     gameState.setPowerUsed(watts);
   }
 
@@ -460,6 +471,29 @@ export class DormScene extends Phaser.Scene {
     this.breakerArrow = null;
     this.lastResetAt = -Infinity;
     this.stepAway = false; // after a failed reset, leave the panel before trying again
+    this.nextFlicker = 0;
+    this.flickerAt = -Infinity;
+    this.lightsOnAt = -Infinity;
+    this.playTime = 0; // game seconds since the room loaded (same clock as the trip timer)
+  }
+
+  // The room's lights: flicker when you're over the limit, dim and flicker
+  // while the power is out, stutter back on after a reset.
+  updateLights() {
+    const now = this.time.now;
+    let alpha;
+    if (gameState.tripped) {
+      if (now >= this.nextFlicker) {
+        this.flickerAt = now;
+        this.nextFlicker = now + 1400 + Math.random() * 1600;
+      }
+      alpha = stepAt(OUTAGE_FLICKER, now - this.flickerAt);
+    } else if (this.overloadFor > 0) {
+      alpha = stepAt(BROWNOUT, this.overloadFor * 1000);
+    } else {
+      alpha = stepAt(LIGHTS_ON, now - this.lightsOnAt);
+    }
+    if (this.darkness.alpha !== alpha) this.darkness.setAlpha(alpha);
   }
 
   updateBreaker(dt) {
@@ -523,16 +557,35 @@ export class DormScene extends Phaser.Scene {
     gameState.setTripped(true);
     this.overloadFor = 0;
     this.resetProgress = 0;
+    this.nextFlicker = this.time.now + 1500;
     if (again && this.spotNear('breaker')) this.stepAway = true;
-    this.tweens.killTweensOf(this.darkness);
-    if (silent) {
-      this.darkness.setAlpha(DIM);
-      return;
-    }
-    this.tweens.add({ targets: this.darkness, alpha: DIM, duration: 250 });
+    if (silent) return;
+
+    // The surge fries machines: one, or two if it trips again right after a reset.
+    const justLoaded = this.playTime < LOAD_GRACE;
+    const fried = justLoaded ? [] : this.fryMachines(again ? 2 : 1);
     this.sparks(DORM.breaker.panelX, DORM.breaker.panelY);
-    this.cameras.main.shake(180, 0.004);
-    this.events.emit('breaker-tripped', { again, ...gameState.power });
+    this.cameras.main.shake(again ? 260 : 180, again ? 0.007 : 0.004);
+    this.events.emit('breaker-tripped', { again, fried, ...gameState.power });
+  }
+
+  /** Fries up to `count` random working machines. Returns their names. */
+  fryMachines(count) {
+    const candidates = this.stations.filter((st) => st.plotId && !st.hustle.broken);
+    const fried = [];
+    while (fried.length < count && candidates.length) {
+      const st = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
+      st.hustle.setBroken(true);
+      const plot = this.plots.find((p) => p.id === st.plotId);
+      this.sparks(plot.x, plot.sprite.y - plot.sprite.height / 2);
+      fried.push(ITEMS[plot.itemId].name);
+    }
+    return fried;
+  }
+
+  /** Installed machines that are fried and waiting for a repair. */
+  get friedCount() {
+    return this.stations.filter((st) => st.hustle.broken).length;
   }
 
   resetBreaker() {
@@ -540,16 +593,7 @@ export class DormScene extends Phaser.Scene {
     this.lastResetAt = this.time.now;
     this.resetProgress = 0;
     this.overloadFor = 0;
-    // The lights flicker back on.
-    this.tweens.killTweensOf(this.darkness);
-    this.tweens.chain({
-      targets: this.darkness,
-      tweens: [
-        { alpha: 0.05, duration: 70 },
-        { alpha: 0.22, duration: 90 },
-        { alpha: 0, duration: 220 },
-      ],
-    });
+    this.lightsOnAt = this.time.now; // the lights stutter back on
     this.floatText('Power back on!', DORM.breaker.labelX - 40, DORM.breaker.labelY - 70, '#4ade80');
     this.events.emit('breaker-reset');
   }
@@ -691,12 +735,14 @@ export class DormScene extends Phaser.Scene {
 
   stationState(station) {
     const h = station.hustle;
-    return { pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated };
+    return { pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken };
   }
 
   restoreStation(station, state) {
     if (!station || !state) return;
-    Object.assign(station.hustle, state);
+    const { broken, ...rest } = state;
+    Object.assign(station.hustle, rest);
+    if (broken && station.plotId) station.hustle.setBroken(true, { quiet: true });
     station.hustle.renderPile();
   }
 

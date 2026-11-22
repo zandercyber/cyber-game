@@ -62,7 +62,7 @@ export function readSave({ plotIds, pileMax }) {
   const isOrderable = (id) => orderable(id) !== null;
   const station = (value, max) => {
     const v = obj(value);
-    return { pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true };
+    return { pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true, broken: v.broken === true };
   };
 
   // Per-machine piles and heat, only for plots that really hold an earning item.
