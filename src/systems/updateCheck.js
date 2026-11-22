@@ -23,6 +23,8 @@ export async function checkForUpdate() {
 
     const url = new URL(window.location.href);
     url.searchParams.set('v', id); // a new URL can't come from the browser's saved copy
+    // Let the game save first, so updating never costs any progress.
+    window.dispatchEvent(new Event('cyber-game:save-now'));
     window.location.replace(url.toString());
   } catch {
     // Offline or blocked: keep playing the version we have.
