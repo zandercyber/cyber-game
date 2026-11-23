@@ -30,12 +30,23 @@ export const AGENT_JOBS = [
   { name: 'AI agent answering help-desk tickets', seconds: 9, pay: 22 },
 ];
 
+// AI model training (the GPU rig): long jobs, the best pay in the dorm.
+export const TRAINING_JOBS = [
+  { name: 'Fine-tune a support chatbot', seconds: 10, pay: 28 },
+  { name: 'Train a phishing-email classifier', seconds: 12, pay: 34 },
+  { name: 'Train a malware-detection model', seconds: 14, pay: 40 },
+  { name: 'Red-team a model for jailbreaks', seconds: 11, pay: 32 },
+  { name: 'Run safety evals for a client\'s model', seconds: 9, pay: 24 },
+  { name: 'Train an anomaly detector on network logs', seconds: 13, pay: 36 },
+];
+
 // Heat: working warms the machine; at 100 it overheats and must fully cool down.
 export const HEAT = {
   starterDesk: { perSecondWorking: 5, perSecondCooling: 10, idleCooling: 6 }, // ~20 s of work
   laptop: { perSecondWorking: 6, perSecondCooling: 10, idleCooling: 6 }, // ~17 s
   workstation: { perSecondWorking: 4, perSecondCooling: 8, idleCooling: 5 }, // ~25 s
   rack: { perSecondWorking: 3, perSecondCooling: 8, idleCooling: 5 }, // ~33 s
+  gpu: { perSecondWorking: 4, perSecondCooling: 7, idleCooling: 4 }, // ~25 s, slow to cool: it runs hot
 };
 
 // The starter desk's cash pile cap. When a pile is full, that machine stops.

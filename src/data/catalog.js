@@ -48,8 +48,19 @@ export const ITEMS = {
     noise: 4, // while being worked (see neighbor.js)
     deliverySeconds: 120,
     footprint: [[-83, -42], [-83, -71], [82, -71], [82, -51], [70, -43], [-8, -4], [-71, -35]],
-    // Best pay in the dorm (~10 $/s), so Augustus goes for it first.
+    // ~10 $/s while worked.
     earns: { mode: 'work', jobs: 'agents', payMultiplier: 4, heat: 'rack', pileMax: 300 },
+  },
+  'gpu-rig': {
+    name: 'GPU rig',
+    file: 'stations/gpu-rig.png', // Zander's Gemini art, resampled to a 108x104 grid and drawn at 2x
+    price: 2500,
+    watts: 1500, // needs the battery backup (UPS) or better
+    noise: 5, // while being worked (see neighbor.js)
+    deliverySeconds: 150,
+    footprint: [[-92, -56], [-32, -14], [92, -80], [31, -120]], // pulled in a little at the front so paths to the work spot clear its corner
+    // Best pay in the dorm (~20 $/s while worked), but it runs hot. Agents go for it first.
+    earns: { mode: 'work', jobs: 'training', payMultiplier: 7, heat: 'gpu', pileMax: 500 },
   },
 };
 
@@ -62,6 +73,8 @@ export const POWER_TIERS = [
   { id: 'surge-protector', name: 'Surge protector', capacity: 1500, price: 200, deliverySeconds: 20, icon: 'item-surge-protector' },
   { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 600, deliverySeconds: 40, icon: 'item-ups' },
   { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, deliverySeconds: 60, icon: 'item-dedicated-circuit' },
+  // Room for two GPU rigs. No art yet: the shop shows a ⚡ until Zander's icon arrives.
+  { id: 'sub-panel', name: 'Electrical sub-panel', capacity: 5000, price: 4000, deliverySeconds: 90, icon: null },
 ];
 
 // Power upgrades by id (everything after the starting wall outlet), with their tier number.

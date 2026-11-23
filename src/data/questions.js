@@ -12,7 +12,7 @@ export const QUESTION_SECONDS = 15;
 export const QUESTION_GROUPS = {
   helpdesk: { name: 'Help desk', jobs: 'helpdesk' },
   web: { name: 'Web security', jobs: 'bounty' },
-  ai: { name: 'AI security', jobs: 'agents' },
+  ai: { name: 'AI security', jobs: ['agents', 'training'] }, // the server rack and the GPU rig
 };
 
 export const QUESTIONS = {
@@ -274,5 +274,5 @@ export const QUESTIONS = {
 
 /** Which question group a job list belongs to ('helpdesk' | 'web' | 'ai'), or null. */
 export function groupForJobs(jobs) {
-  return Object.keys(QUESTION_GROUPS).find((g) => QUESTION_GROUPS[g].jobs === jobs) ?? null;
+  return Object.keys(QUESTION_GROUPS).find((g) => [QUESTION_GROUPS[g].jobs].flat().includes(jobs)) ?? null;
 }

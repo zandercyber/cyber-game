@@ -26,7 +26,7 @@ export const NERO_UPGRADES = {
   speed: {
     name: 'Nero speed',
     prices: [400, 800, 1600, 3200, 6400],
-    describe: (lvl) => `Floats and works ${15 * lvl}% faster`,
+    describe: (lvl) => `Floats ${15 * lvl}% faster, works ${12 * lvl}% faster`,
   },
   profit: {
     name: 'Nero profit',

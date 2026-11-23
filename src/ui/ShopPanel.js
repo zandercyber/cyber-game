@@ -13,7 +13,7 @@ const FONT = 'system-ui, sans-serif';
 const X = 20;
 const Y = 100;
 const W = 520;
-const ROW_H = 86;
+const ROW_H = 76; // 7 rows in the Gear tab still fit on a 768-tall screen
 const HEADER_H = 70;
 const CHIPS_H = 40; // the agent-type picker at the top of the Agents tab
 const TEXT_W = W - 96 - 140; // leave room for the price button
@@ -38,7 +38,7 @@ export class ShopPanel {
     Object.assign(this, callbacks);
     const ids = Object.keys(ITEMS);
     const rowCount = ids.length + 2; // machines + a power row + a foam row
-    this.height = HEADER_H + rowCount * ROW_H + 64;
+    this.height = HEADER_H + rowCount * ROW_H + 56;
 
     this.root = scene.add.container(X, Y).setDepth(30000).setVisible(false);
     const bg = scene.add.graphics();
@@ -61,7 +61,7 @@ export class ShopPanel {
     this.powerRow = this.addRow(HEADER_H + ids.length * ROW_H, { tab: 'gear', id: null, thumb: ['item-power-strip'] });
     this.foamRow = this.addRow(HEADER_H + (ids.length + 1) * ROW_H, { tab: 'gear', id: null, thumb: ['foam-charcoal', undefined, 1.1] });
     this.rows.push(this.powerRow, this.foamRow);
-    this.ordersText = scene.add.text(20, HEADER_H + rowCount * ROW_H + 14, '', {
+    this.ordersText = scene.add.text(20, HEADER_H + rowCount * ROW_H + 8, '', {
       fontFamily: FONT, fontSize: '15px', color: '#fbbf24', lineSpacing: 4,
     });
 
@@ -136,10 +136,10 @@ export class ShopPanel {
     const image = s.add.image(52, y + ROW_H / 2, key, frame);
     image.setScale(scale ?? Math.min(64 / image.width, 64 / image.height));
     const bolt = s.add.text(52, y + ROW_H / 2, '⚡', { fontSize: '40px' }).setOrigin(0.5).setVisible(false);
-    const name = s.add.text(96, y + 14, id ? ITEMS[id].name : '', {
+    const name = s.add.text(96, y + 9, id ? ITEMS[id].name : '', {
       fontFamily: FONT, fontSize: '18px', fontStyle: 'bold', color: '#e6f4ff', wordWrap: { width: TEXT_W },
     });
-    const info = s.add.text(96, y + 42, '', {
+    const info = s.add.text(96, y + 35, '', {
       fontFamily: FONT, fontSize: '14px', color: '#94a3b8', wordWrap: { width: TEXT_W },
     });
     const btn = s.add.rectangle(W - 72, y + ROW_H / 2, 108, 50, GREEN).setInteractive({ useHandCursor: true });
@@ -240,7 +240,7 @@ export class ShopPanel {
 
       // Machines: warn if it would push you over your power supply's limit.
       if (row !== this.powerRow && row !== this.foamRow) {
-        const kind = { bounty: 'Bug bounties', agents: 'AI agent jobs' }[item.earns?.jobs] ?? 'Hustles';
+        const kind = { bounty: 'Bug bounties', agents: 'AI agent jobs', training: 'AI model training' }[item.earns?.jobs] ?? 'Hustles';
         const over = power.used + item.watts > power.capacity;
         row.info.setText(`${kind} · ${item.watts} W${over ? ' (over limit)' : ''} · ${item.deliverySeconds}s`);
         row.info.setColor(over ? '#fca5a5' : '#94a3b8');
@@ -248,8 +248,9 @@ export class ShopPanel {
     }
 
     const orders = this.getOrders();
-    const lines = orders.slice(0, 3).map((o) => `${orderable(o.itemId).name}: arriving in ${Math.ceil(o.remaining)}s`);
-    if (orders.length > 3) lines.push(`+${orders.length - 3} more on the way`);
+    // Two lines at most, so the list fits under the rows.
+    const lines = orders.slice(0, 2).map((o) => `${orderable(o.itemId).name}: arriving in ${Math.ceil(o.remaining)}s`);
+    if (orders.length > 2) lines[1] += `  (+${orders.length - 2} more)`;
     this.ordersText.setText(lines.length ? lines.join('\n') : 'No deliveries on the way.');
     this.ordersText.setColor(lines.length ? '#fbbf24' : '#64748b');
   }
