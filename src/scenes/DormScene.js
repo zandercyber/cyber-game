@@ -29,6 +29,8 @@ const JOB_LISTS = { helpdesk: HELPDESK_JOBS, bounty: BOUNTY_JOBS, agents: AGENT_
 // Where delivery boxes land, relative to the delivery spot by the door.
 const BOX_OFFSETS = [[0, 12], [-58, 32], [58, 32], [-30, 62], [30, 62], [0, 92]];
 const BOX_REACH = 52;
+const DOOR_DROP = 60; // walk this close to the door spot with a box to set it back down
+const DOOR_LEAVE = 140; // ...after first walking at least this far away (so you don't drop it as you pick it up)
 const TRIP_DELAY = 1.2; // seconds over the limit (lights flickering) before the breaker trips
 const RESET_SECONDS = 1.5; // how long you stand at the panel to reset it
 const DIM = 0.32; // how dark the room gets while the power is out
@@ -127,6 +129,7 @@ export class DormScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#b8ffcf', stroke: '#0b0e14', strokeThickness: 4,
     }).setOrigin(0.5, 1).setDepth(12100).setVisible(false);
     this.carryBox = null;
+    this.leftDoor = true; // walked away from the door since the last box pickup / drop-off
     this.orders = [];
     this.boxes = [];
     this.shopOpen = false;
@@ -530,11 +533,22 @@ export class DormScene extends Phaser.Scene {
   }
 
   updateBoxes() {
-    if (this.carryBox) return;
+    const door = Math.hypot(this.player.x - DORM.deliverySpot.x, this.player.y - DORM.deliverySpot.y);
+    if (door > DOOR_LEAVE) this.leftDoor = true;
+    if (this.carryBox) {
+      // Changed your mind (or nowhere to put it)? Bring it back to the door.
+      if (door < DOOR_DROP && this.leftDoor) this.setBoxDown();
+      return;
+    }
+    if (!this.leftDoor) return; // just set a box down here
     for (const box of this.boxes) {
       if (Math.hypot(this.player.x - box.x, this.player.y - box.y) > BOX_REACH) continue;
       if (this.carried > 0) {
         this.nudge('Hands full: stash your cash first', box.x, box.y - 100);
+        return;
+      }
+      if (!isPower(box.itemId) && !this.hasEmptyPlot) {
+        this.nudge('No empty plot: dig up a machine with the shovel first', box.x, box.y - 100);
         return;
       }
       this.pickUpBox(box);
@@ -542,11 +556,27 @@ export class DormScene extends Phaser.Scene {
     }
   }
 
+  get hasEmptyPlot() {
+    return this.plots.some((p) => !p.itemId);
+  }
+
+  // Puts the box you're holding back by the door.
+  setBoxDown() {
+    const { itemId, sprite } = this.carryBox;
+    this.carryBox = null;
+    sprite.destroy();
+    this.spawnBox(itemId);
+    this.leftDoor = false;
+    if (this.carried === 0) this.player.setCarrying(false);
+    this.floatText('Box set down by the door', DORM.deliverySpot.x, DORM.deliverySpot.y - 150, '#fde68a');
+  }
+
   pickUpBox(box) {
     this.boxes.splice(this.boxes.indexOf(box), 1);
     box.label.destroy();
     box.sprite.setScale(0.85);
     this.carryBox = { itemId: box.itemId, sprite: box.sprite };
+    this.leftDoor = false;
     this.player.setCarrying(true);
     const where = isPower(box.itemId) ? 'take it to the breaker' : 'put it on an empty plot';
     this.floatText(`${orderable(box.itemId).name}: ${where}`, this.player.x, this.player.y - 140, '#5ff0ff');
