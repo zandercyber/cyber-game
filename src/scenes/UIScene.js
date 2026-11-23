@@ -130,8 +130,8 @@ export class UIScene extends Phaser.Scene {
     const onComplaint = ({ fine, paid, next }) => this.showBanner(`Noise complaint! -$${paid}`, `${paid < fine ? `You couldn't cover the $${fine} fine. ` : ''}The next complaint costs $${next}.`, RED);
     const onSatisfied = () => this.showBanner('Quiet enough', 'Your neighbor grumbles and heads back home.', GREEN);
     const onLeft = () => { if (this.dorm.switchedOffCount) this.showBanner('They\'re gone', 'Walk up to your machines to switch them back on.', 0x5ff0ff); };
-    const PURPLE = 0xa78bfa;
-    const onNight = () => this.showBanner('Quiet hours', `10 PM to 6 AM: your neighbor is trying to sleep, so noise bothers them ${NEIGHBOR.nightMultiplier}x as fast.`, PURPLE);
+    const NIGHT = 0xa78bfa;
+    const onNight = () => this.showBanner('Quiet hours', `10 PM to 6 AM: your neighbor is trying to sleep, so noise bothers them ${NEIGHBOR.nightMultiplier}x as fast.`, NIGHT);
     const onMorning = () => this.showBanner('Good morning', 'Quiet hours are over. Your neighbor is back to normal.', AMBER);
     const neighborEvents = { 'night-start': onNight, 'night-end': onMorning, 'neighbor-warning': onWarn, 'neighbor-coming': onComing, 'neighbor-complaint': onComplaint, 'neighbor-satisfied': onSatisfied, 'neighbor-left': onLeft };
     for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.on(name, fn);
