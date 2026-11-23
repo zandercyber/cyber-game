@@ -8,6 +8,7 @@
 import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels } from '../data/agents.js';
 import { QUESTIONS } from '../data/questions.js';
+import { NEIGHBOR } from '../data/neighbor.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 
 const KEY = 'cyber-game-save';
@@ -65,7 +66,9 @@ export function readSave({ plotIds, pileMax }) {
   const isOrderable = (id) => orderable(id) !== null;
   const station = (value, max) => {
     const v = obj(value);
-    return { pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true, broken: v.broken === true };
+    return {
+      pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true, broken: v.broken === true, off: v.off === true,
+    };
   };
 
   // Per-machine piles and heat, only for plots that really hold an earning item.
@@ -133,6 +136,15 @@ export function readSave({ plotIds, pileMax }) {
   const rawLevels = obj(raw.playerLevels);
   const playerLevels = Object.fromEntries(PLAYER_UPGRADE_IDS.map((k) => [k, int(rawLevels[k], 0, PLAYER_MAX_LEVEL)]));
 
+  // The neighbor: how annoyed, how many complaints so far, and whether a visit was under way.
+  const n = obj(raw.neighbor);
+  const neighbor = {
+    annoyance: num(n.annoyance, 0, 100),
+    complaints: int(n.complaints, 0, 50),
+    grace: num(n.grace, 0, NEIGHBOR.graceSeconds),
+    visit: n.visit === true,
+  };
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
@@ -151,6 +163,7 @@ export function readSave({ plotIds, pileMax }) {
     agentLevels,
     questionsSeen,
     playerLevels,
+    neighbor,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {

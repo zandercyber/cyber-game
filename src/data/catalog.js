@@ -14,6 +14,7 @@ export const ITEMS = {
     file: 'stations/folding-laptop.png',
     price: 25,
     watts: 45,
+    noise: 1, // while being worked (see neighbor.js)
     deliverySeconds: 15,
     footprint: [[-54, -48], [-54, -59], [53, -59], [53, -39], [-12, -5], [-53, -26]],
     earns: { mode: 'work', jobs: 'helpdesk', payMultiplier: 1.5, heat: 'laptop', pileMax: 60 },
@@ -23,6 +24,7 @@ export const ITEMS = {
     file: 'stations/laptop-desk.png',
     price: 80,
     watts: 90,
+    noise: 1, // while being worked (see neighbor.js)
     deliverySeconds: 25,
     // Floor area the item covers, relative to the bottom-center of its image.
     footprint: [[-68, -40], [-68, -70], [70, -70], [70, -21], [37, -5], [-23, -15]],
@@ -33,6 +35,7 @@ export const ITEMS = {
     file: 'stations/dual-monitor-desk.png',
     price: 250,
     watts: 350,
+    noise: 2, // while being worked (see neighbor.js)
     deliverySeconds: 45,
     footprint: [[-105, -38], [-105, -92], [104, -92], [104, -70], [69, -12], [-41, -4]],
     earns: { mode: 'work', jobs: 'bounty', payMultiplier: 1, heat: 'workstation', pileMax: 200 },
@@ -42,6 +45,7 @@ export const ITEMS = {
     file: 'stations/server-rack.png',
     price: 900,
     watts: 900,
+    noise: 4, // while being worked (see neighbor.js)
     deliverySeconds: 120,
     footprint: [[-83, -42], [-83, -71], [82, -71], [82, -51], [70, -43], [-8, -4], [-71, -35]],
     // Best pay in the dorm (~10 $/s), so Augustus goes for it first.

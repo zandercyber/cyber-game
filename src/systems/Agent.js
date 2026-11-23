@@ -196,8 +196,8 @@ export class Agent {
 
   canWork(station) {
     const h = station.hustle;
-    return Boolean(station.plotId) && h.enabled && h.powered && !h.idle && !h.broken && !h.overheated && !h.pileFull
-      && !this.taken(station);
+    return Boolean(station.plotId) && h.enabled && h.powered && !h.idle && !h.broken && !h.switchedOff && !h.overheated
+      && !h.pileFull && !this.taken(station);
   }
 
   bestMachine() {
@@ -313,7 +313,7 @@ export class Agent {
     const gone = !this.scene.stations.includes(st); // shoveled
     const h = st?.hustle;
     const youAreHere = st?.near && !this.scene.player.moving;
-    if (!gone && h.enabled && h.powered && !h.broken && !h.overheated && !h.pileFull && !youAreHere && !this.tired) return;
+    if (!gone && h.enabled && h.powered && !h.broken && !h.switchedOff && !h.overheated && !h.pileFull && !youAreHere && !this.tired) return;
     this.station = null;
     this.state = 'idle';
     this.thinkIn = 0.2;
