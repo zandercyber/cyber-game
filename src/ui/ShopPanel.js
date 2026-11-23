@@ -1,10 +1,11 @@
 // The shop screen: opens when you stand at the corner laptop (after it unlocks).
 // Three tabs:
-//   Gear: machines plus the next power upgrade and foam panels; orders arrive later as a box at the door.
+//   Machines (tab id 'gear'): machines; orders arrive later as a box at the door.
+//   Room: the next power upgrade, foam panels and box fans (each box goes where it's used).
 //   Agents: hire AI agents (up to MAX_AGENTS, any mix) and upgrade each type. Pick a type with the chips.
 //   You: your own upgrades (carry limit, walking speed, work speed).
 
-import { ITEMS, FOAM_MAX_LEVEL, FOAM_QUIET_PER_LEVEL, orderable } from '../data/catalog.js';
+import { ITEMS, FOAM_MAX_LEVEL, FOAM_QUIET_PER_LEVEL, FAN, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS } from '../data/agents.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
@@ -13,7 +14,7 @@ const FONT = 'system-ui, sans-serif';
 const X = 20;
 const Y = 100;
 const W = 520;
-const ROW_H = 76; // 7 rows in the Gear tab still fit on a 768-tall screen
+const ROW_H = 84;
 const HEADER_H = 70;
 const CHIPS_H = 40; // the agent-type picker at the top of the Agents tab
 const TEXT_W = W - 96 - 140; // leave room for the price button
@@ -34,10 +35,10 @@ function agentThumb(type, kind) {
 export class ShopPanel {
   constructor(scene, callbacks) {
     this.scene = scene;
-    // onBuy, getOrders, getPower, getFoam, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade
+    // onBuy, getOrders, getPower, getFoam, getFans, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade
     Object.assign(this, callbacks);
     const ids = Object.keys(ITEMS);
-    const rowCount = ids.length + 2; // machines + a power row + a foam row
+    const rowCount = Math.max(ids.length, 5); // the tallest tab (machines; agents need about 5 rows too)
     this.height = HEADER_H + rowCount * ROW_H + 56;
 
     this.root = scene.add.container(X, Y).setDepth(30000).setVisible(false);
@@ -51,16 +52,19 @@ export class ShopPanel {
     this.subtitle = scene.add.text(20, 48, '', { fontFamily: FONT, fontSize: '14px', color: '#94a3b8' });
     this.root.add(this.subtitle);
     this.tabButtons = [
-      this.addButton(W - 316, 14, 96, 36, 'Gear', () => this.setTab('gear'), 'gear'),
-      this.addButton(W - 212, 14, 96, 36, 'Agents', () => this.setTab('agents'), 'agents'),
-      this.addButton(W - 108, 14, 88, 36, 'You', () => this.setTab('you'), 'you'),
+      this.addButton(W - 368, 14, 104, 36, 'Machines', () => this.setTab('gear'), 'gear'),
+      this.addButton(W - 258, 14, 80, 36, 'Room', () => this.setTab('room'), 'room'),
+      this.addButton(W - 172, 14, 88, 36, 'Agents', () => this.setTab('agents'), 'agents'),
+      this.addButton(W - 78, 14, 58, 36, 'You', () => this.setTab('you'), 'you'),
     ];
 
-    // Gear tab.
+    // Machines tab.
     this.rows = ids.map((id, i) => this.addRow(HEADER_H + i * ROW_H, { tab: 'gear', id, thumb: [`station-${id}`] }));
-    this.powerRow = this.addRow(HEADER_H + ids.length * ROW_H, { tab: 'gear', id: null, thumb: ['item-power-strip'] });
-    this.foamRow = this.addRow(HEADER_H + (ids.length + 1) * ROW_H, { tab: 'gear', id: null, thumb: ['foam-charcoal', undefined, 1.1] });
-    this.rows.push(this.powerRow, this.foamRow);
+    // Room tab: power, foam, fans.
+    this.powerRow = this.addRow(HEADER_H, { tab: 'room', id: null, thumb: ['item-power-strip'] });
+    this.foamRow = this.addRow(HEADER_H + ROW_H, { tab: 'room', id: null, thumb: ['foam-charcoal', undefined, 1.1] });
+    this.fanRow = this.addRow(HEADER_H + 2 * ROW_H, { tab: 'room', id: FAN.id, thumb: [FAN.icon] });
+    this.rows.push(this.powerRow, this.foamRow, this.fanRow);
     this.ordersText = scene.add.text(20, HEADER_H + rowCount * ROW_H + 8, '', {
       fontFamily: FONT, fontSize: '15px', color: '#fbbf24', lineSpacing: 4,
     });
@@ -117,7 +121,8 @@ export class ShopPanel {
     this.tab = tab;
     for (const b of this.tabButtons) this.styleButton(b, b.id === tab);
     this.subtitle.setText({
-      gear: 'Orders arrive as a box at the door. Carry it to where it goes.',
+      gear: 'Machines arrive as a box at the door. Carry it to an empty plot.',
+      room: 'Room upgrades arrive as a box too. Carry each one to where it goes.',
       agents: `Hire up to ${MAX_AGENTS} agents, any mix. Upgrades apply to every agent of that type.`,
       you: 'Upgrades take effect right away.',
     }[tab]);
@@ -136,10 +141,10 @@ export class ShopPanel {
     const image = s.add.image(52, y + ROW_H / 2, key, frame);
     image.setScale(scale ?? Math.min(64 / image.width, 64 / image.height));
     const bolt = s.add.text(52, y + ROW_H / 2, '⚡', { fontSize: '40px' }).setOrigin(0.5).setVisible(false);
-    const name = s.add.text(96, y + 9, id ? ITEMS[id].name : '', {
+    const name = s.add.text(96, y + 12, id ? orderable(id)?.name ?? '' : '', {
       fontFamily: FONT, fontSize: '18px', fontStyle: 'bold', color: '#e6f4ff', wordWrap: { width: TEXT_W },
     });
-    const info = s.add.text(96, y + 35, '', {
+    const info = s.add.text(96, y + 40, '', {
       fontFamily: FONT, fontSize: '14px', color: '#94a3b8', wordWrap: { width: TEXT_W },
     });
     const btn = s.add.rectangle(W - 72, y + ROW_H / 2, 108, 50, GREEN).setInteractive({ useHandCursor: true });
@@ -192,6 +197,7 @@ export class ShopPanel {
 
   refresh() {
     if (this.tab === 'gear') this.refreshGear();
+    else if (this.tab === 'room') this.refreshRoom();
     else if (this.tab === 'agents') this.refreshAgents();
     else this.refreshYou();
     // Only the current tab's rows are visible and tappable.
@@ -213,7 +219,7 @@ export class ShopPanel {
     }
     this.agentCount.setVisible(agents);
     this.rosterText.setVisible(agents);
-    this.ordersText.setVisible(this.tab === 'gear');
+    this.ordersText.setVisible(this.tab === 'gear' || this.tab === 'room');
   }
 
   setButton(row, text, canBuy) {
@@ -224,29 +230,52 @@ export class ShopPanel {
   }
 
   refreshGear() {
+    const power = gameState.power;
+    for (const row of this.rows) {
+      if (row.tab !== 'gear') continue;
+      const item = orderable(row.id);
+      this.setButton(row, `$${item.price}`, gameState.cash >= item.price);
+      // Warn if it would push you over your power supply's limit.
+      const kind = { bounty: 'Bug bounties', agents: 'AI agent jobs', training: 'AI model training' }[item.earns?.jobs] ?? 'Hustles';
+      const over = power.used + item.watts > power.capacity;
+      row.info.setText(`${kind} · ${item.watts} W${over ? ' (over limit)' : ''} · ${item.deliverySeconds}s`);
+      row.info.setColor(over ? '#fca5a5' : '#94a3b8');
+    }
+    this.refreshOrders();
+  }
+
+  refreshRoom() {
     const { next, pending } = this.getPower();
     this.refreshPowerRow(next, pending);
     const foam = this.getFoam();
     this.refreshFoamRow(foam);
-    const power = gameState.power;
-
-    for (const row of this.rows) {
-      if (row.tab !== 'gear') continue;
+    for (const [row, waiting] of [[this.powerRow, pending], [this.foamRow, foam.pending]]) {
       const item = row.id ? orderable(row.id) : null;
-      const waiting = (row === this.powerRow && pending) || (row === this.foamRow && foam.pending);
-      let text = item ? `$${item.price}` : 'Maxed';
-      if (waiting) text = 'On the way';
+      const text = waiting ? 'On the way' : item ? `$${item.price}` : 'Maxed';
       this.setButton(row, text, Boolean(item) && !waiting && gameState.cash >= item.price);
-
-      // Machines: warn if it would push you over your power supply's limit.
-      if (row !== this.powerRow && row !== this.foamRow) {
-        const kind = { bounty: 'Bug bounties', agents: 'AI agent jobs', training: 'AI model training' }[item.earns?.jobs] ?? 'Hustles';
-        const over = power.used + item.watts > power.capacity;
-        row.info.setText(`${kind} · ${item.watts} W${over ? ' (over limit)' : ''} · ${item.deliverySeconds}s`);
-        row.info.setColor(over ? '#fca5a5' : '#94a3b8');
-      }
     }
+    this.refreshFanRow(this.getFans());
+    this.refreshOrders();
+  }
 
+  // One fan per machine: offered while some machine still has none (counting fans on the way).
+  refreshFanRow({ machines, withFan, pending }) {
+    const row = this.fanRow;
+    const needed = machines - withFan - pending;
+    row.name.setText(machines ? `${FAN.name} (${withFan}/${machines} machines)` : FAN.name);
+    const pct = (n) => Math.round(Math.abs(1 - n) * 100);
+    let info = `Heats ${pct(FAN.heatSlower)}% slower, cools ${pct(FAN.coolFaster)}% faster · +${FAN.noise} noise · ${FAN.watts} W · clips onto a machine`;
+    const without = machines - withFan;
+    if (!machines) info = 'Clips onto a machine: buy a machine first';
+    else if (!without) info = pending ? 'Every machine has a fan (a spare one is at the door)' : 'Every machine has a fan';
+    else if (needed <= 0) info = 'On the way: carry the box to a machine without a fan';
+    row.info.setText(info).setColor('#94a3b8');
+    let text = `$${FAN.price}`;
+    if (needed <= 0) text = pending && without ? 'On the way' : 'All set';
+    this.setButton(row, text, needed > 0 && gameState.cash >= FAN.price);
+  }
+
+  refreshOrders() {
     const orders = this.getOrders();
     // Two lines at most, so the list fits under the rows.
     const lines = orders.slice(0, 2).map((o) => `${orderable(o.itemId).name}: arriving in ${Math.ceil(o.remaining)}s`);
