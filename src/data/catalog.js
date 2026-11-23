@@ -73,8 +73,8 @@ export const POWER_TIERS = [
   { id: 'surge-protector', name: 'Surge protector', capacity: 1500, price: 200, deliverySeconds: 20, icon: 'item-surge-protector' },
   { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 600, deliverySeconds: 40, icon: 'item-ups' },
   { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, deliverySeconds: 60, icon: 'item-dedicated-circuit' },
-  // Room for two GPU rigs. No art yet: the shop shows a ⚡ until Zander's icon arrives.
-  { id: 'sub-panel', name: 'Electrical sub-panel', capacity: 5000, price: 4000, deliverySeconds: 90, icon: null },
+  // Room for two GPU rigs.
+  { id: 'sub-panel', name: 'Electrical sub-panel', capacity: 5000, price: 4000, deliverySeconds: 90, icon: 'item-sub-panel' },
 ];
 
 // Power upgrades by id (everything after the starting wall outlet), with their tier number.
@@ -111,6 +111,7 @@ export const SMALL_IMAGES = {
   'item-surge-protector': 'items/surge-protector.png',
   'item-ups': 'items/ups.png',
   'item-dedicated-circuit': 'items/dedicated-circuit.png',
+  'item-sub-panel': 'items/sub-panel.png', // Zander's Gemini art, cut out and shrunk to 55x64
   'item-shovel': 'items/shovel.png',
   'foam-charcoal': 'foam/foam-charcoal.png',
   'foam-navy': 'foam/foam-navy.png',
