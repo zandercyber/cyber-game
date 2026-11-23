@@ -15,8 +15,10 @@ import {
   HELPDESK_JOBS, BOUNTY_JOBS, AGENT_JOBS, HEAT, STARTER_DESK_PILE_MAX, SHOP_UNLOCK_CASH,
 } from '../data/hustles.js';
 import { readSave, writeSave } from '../state/save.js';
-import { Augustus } from '../systems/Augustus.js';
-import { AUGUSTUS, AUGUSTUS_UPGRADES, MAX_LEVEL, noLevels } from '../data/augustus.js';
+import { Agent } from '../systems/Agent.js';
+import {
+  AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, agentName, hirePrice, isAgentType, noAgentLevels,
+} from '../data/agents.js';
 import { QUESTIONS, QUESTION_CHANCE, QUESTION_GROUPS, groupForJobs } from '../data/questions.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, playerStats, noPlayerLevels } from '../data/playerUpgrades.js';
 
@@ -133,11 +135,10 @@ export class DormScene extends Phaser.Scene {
     this.questionChance = QUESTION_CHANCE;
     this.questionsSeen = Object.fromEntries(Object.keys(QUESTIONS).map((g) => [g, []]));
 
-    // AI agent helpers (Augustus for now). A list, so more can join later.
+    // AI agent helpers: up to MAX_AGENTS, any mix of types. Agents of a type share upgrade levels.
     this.agents = [];
-    this.augustusHired = false;
-    this.augustusArrival = null; // seconds until he floats in after hiring
-    this.augustusLevels = noLevels();
+    this.arrivals = []; // hired, floating in through the door: { type, remaining }
+    this.agentLevels = Object.fromEntries(AGENT_TYPE_IDS.map((type) => [type, noAgentLevels(type)]));
 
     // Pick up where you left off, then keep saving automatically.
     this.restoreProgress();
@@ -244,7 +245,7 @@ export class DormScene extends Phaser.Scene {
       const helper = atThis ? undefined : helpers.get(st);
       const busy = st.hustle.update(dt, {
         canWork: (atThis && still && !this.handsFull) || Boolean(helper),
-        near: st.near || Boolean(helper),
+        near: st.near,
         handsFull: atThis && this.handsFull,
         rate: helper?.workRate ?? 1,
         bonus: helper?.payBonus ?? 1,
@@ -352,56 +353,71 @@ export class DormScene extends Phaser.Scene {
     return { correct, pay };
   }
 
-  // ---------- Augustus (AI agent helpers) ----------
+  // ---------- AI agents (Augustus and friends) ----------
 
   updateAgents(dt) {
-    if (this.augustusArrival !== null) {
-      this.augustusArrival -= dt;
-      if (this.augustusArrival <= 0) {
-        this.augustusArrival = null;
-        this.augustusHired = true;
-        const { x, y } = DORM.deliverySpot;
-        this.spawnAugustus({ x, y: y + 20, arriving: true });
-        this.events.emit('augustus-arrived');
-      }
+    for (const arrival of [...this.arrivals]) {
+      arrival.remaining -= dt;
+      if (arrival.remaining > 0) continue;
+      this.arrivals.splice(this.arrivals.indexOf(arrival), 1);
+      const { x, y } = DORM.deliverySpot;
+      const agent = this.spawnAgent(arrival.type, { x, y: y + 20, arriving: true });
+      this.events.emit('agent-arrived', agent);
     }
     for (const agent of this.agents) agent.update(dt);
   }
 
-  spawnAugustus(opts) {
-    const agent = new Augustus(this, { ...opts, levels: this.augustusLevels });
+  /** Agents you have plus ones on the way (of one type, or all). */
+  agentCount(type = null) {
+    return [...this.agents, ...this.arrivals].filter((a) => !type || a.type === type).length;
+  }
+
+  spawnAgent(type, opts) {
+    const nth = this.agents.filter((a) => a.type === type).length;
+    const agent = new Agent(this, { ...opts, type, name: agentName(type, nth), levels: this.agentLevels[type] });
     this.agents.push(agent);
     return agent;
   }
 
-  /** Called by the shop. Returns true if he's hired. */
-  hireAugustus() {
-    if (!gameState.shopUnlocked || this.augustusHired || this.augustusArrival !== null) return false;
-    if (!gameState.spend(AUGUSTUS.hirePrice)) return false;
-    this.augustusArrival = AUGUSTUS.arriveSeconds;
+  /** Called by the shop. Returns true if the agent is hired (they float in a few seconds later). */
+  hireAgent(type) {
+    if (!isAgentType(type) || !gameState.shopUnlocked || this.agentCount() >= MAX_AGENTS) return false;
+    if (!gameState.spend(hirePrice(type, this.agentCount(type)))) return false;
+    this.arrivals.push({ type, remaining: AGENT_TYPES[type].arriveSeconds });
     return true;
   }
 
-  /** Called by the shop: speed, profit or energy. Returns true if it went through. */
-  buyUpgrade(kind) {
-    const upgrade = Object.hasOwn(AUGUSTUS_UPGRADES, kind) ? AUGUSTUS_UPGRADES[kind] : null;
-    if (!upgrade || !this.augustusHired) return false;
-    const level = this.augustusLevels[kind];
-    if (level >= MAX_LEVEL || !gameState.spend(upgrade.prices[level])) return false;
-    this.augustusLevels = { ...this.augustusLevels, [kind]: level + 1 };
-    for (const agent of this.agents) agent.setLevels(this.augustusLevels);
-    this.events.emit('augustus-upgraded', kind, level + 1);
+  /** Called by the shop: one upgrade for every agent of that type. */
+  buyAgentUpgrade(type, kind) {
+    const upgrades = isAgentType(type) ? AGENT_TYPES[type].upgrades : {};
+    const upgrade = Object.hasOwn(upgrades, kind) ? upgrades[kind] : null;
+    if (!upgrade || !this.agents.some((a) => a.type === type)) return false;
+    const level = this.agentLevels[type][kind];
+    if (level >= AGENT_LEVEL_MAX || !gameState.spend(upgrade.prices[level])) return false;
+    this.agentLevels[type] = { ...this.agentLevels[type], [kind]: level + 1 };
+    for (const agent of this.agents) if (agent.type === type) agent.setLevels(this.agentLevels[type]);
+    this.events.emit('agent-upgraded', type, kind, level + 1);
     return true;
   }
 
-  /** What the shop's Upgrades tab shows. */
-  augustusInfo() {
-    return {
-      hired: this.augustusHired,
-      arriving: this.augustusArrival,
-      levels: this.augustusLevels,
-      status: this.agents[0]?.status ?? '',
-    };
+  /** What the shop's Agents tab shows. */
+  agentsInfo() {
+    const types = Object.fromEntries(AGENT_TYPE_IDS.map((type) => {
+      const owned = this.agents.filter((a) => a.type === type).length;
+      const coming = this.arrivals.filter((a) => a.type === type).map((a) => a.remaining);
+      return [type, {
+        owned,
+        coming: coming.length,
+        nextArrival: coming.length ? Math.min(...coming) : null,
+        nextPrice: hirePrice(type, owned + coming.length),
+        levels: this.agentLevels[type],
+      }];
+    }));
+    const roster = [
+      ...this.agents.map((a) => `${a.name}: ${a.status}`),
+      ...this.arrivals.map((a) => `${AGENT_TYPES[a.type].name}: floats in in ${Math.ceil(a.remaining)}s`),
+    ];
+    return { count: this.agentCount(), max: MAX_AGENTS, types, roster };
   }
 
   // An agent dropping cash in the hamper.
@@ -900,25 +916,14 @@ export class DormScene extends Phaser.Scene {
       orders: this.orders.map((o) => ({ itemId: o.itemId, remaining: Math.ceil(o.remaining) })),
       boxes: this.boxes.map((b) => b.itemId),
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
-      augustus: this.augustusState(),
+      agents: this.agents.map((a) => ({
+        type: a.type, awake: Math.round(a.awake), nap: Math.ceil(a.nap), carried: a.carried, x: Math.round(a.x), y: Math.round(a.y),
+      })),
+      arrivals: this.arrivals.map((a) => ({ type: a.type, remaining: Math.ceil(a.remaining) })),
+      agentLevels: this.agentLevels,
       questionsSeen: this.questionsSeen,
       playerLevels: this.playerLevels,
     });
-  }
-
-  augustusState() {
-    if (!this.augustusHired && this.augustusArrival === null) return null;
-    const a = this.agents[0];
-    return {
-      hired: this.augustusHired,
-      arriving: this.augustusArrival === null ? null : Math.ceil(this.augustusArrival),
-      levels: this.augustusLevels,
-      awake: Math.round(a?.awake ?? 0),
-      nap: Math.ceil(a?.nap ?? 0),
-      carried: a?.carried ?? 0,
-      x: Math.round(a?.x ?? 0),
-      y: Math.round(a?.y ?? 0),
-    };
   }
 
   stationState(station) {
@@ -959,18 +964,13 @@ export class DormScene extends Phaser.Scene {
     this.questionsSeen = save.questionsSeen;
     this.playerLevels = { ...save.playerLevels };
     this.applyPlayerStats();
-    if (save.augustus) {
-      const a = save.augustus;
-      this.augustusLevels = { ...a.levels };
-      if (a.hired) {
-        this.augustusHired = true;
-        const ok = a.position && this.player.canStandAt(a.position.x, a.position.y);
-        const { x, y } = ok ? a.position : { x: DORM.deliverySpot.x, y: DORM.deliverySpot.y + 20 };
-        this.spawnAugustus({ x, y, awake: a.awake, nap: a.nap, carried: a.carried });
-      } else {
-        this.augustusArrival = a.arriving;
-      }
+    this.agentLevels = save.agentLevels;
+    for (const a of save.agents) {
+      const ok = a.position && this.player.canStandAt(a.position.x, a.position.y);
+      const pos = ok ? a.position : { x: DORM.deliverySpot.x, y: DORM.deliverySpot.y + 20 };
+      this.spawnAgent(a.type, { ...pos, awake: a.awake, nap: a.nap, carried: a.carried });
     }
+    this.arrivals = save.arrivals.map((a) => ({ ...a }));
     this.restoreStation(this.deskStation, save.desk);
     this.orders = save.orders.map((o) => ({ ...o }));
     for (const itemId of save.boxes) this.spawnBox(itemId);
@@ -1147,7 +1147,7 @@ export class DormScene extends Phaser.Scene {
   // ---------- Debug (?debug or #debug) ----------
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
-  // U unlock the shop, D deliver all orders now, G hire Augustus now, Q questions on every job.
+  // U unlock the shop, D deliver all orders now, G hire an Augustus now, Q questions on every job.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1168,8 +1168,8 @@ export class DormScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-Q', () => { // every job you finish asks a question (Q again: back to normal)
       this.questionChance = this.questionChance === 1 ? QUESTION_CHANCE : 1;
     });
-    this.input.keyboard.on('keydown-G', () => { // Augustus, free and right now
-      if (!this.augustusHired && this.augustusArrival === null) this.augustusArrival = 0.1;
+    this.input.keyboard.on('keydown-G', () => { // an Augustus, free and right now
+      if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'augustus', remaining: 0.1 });
     });
     this.drawDebug();
   }

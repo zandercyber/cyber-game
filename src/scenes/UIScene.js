@@ -1,7 +1,7 @@
 // Heads-up display drawn on top of the room: cash, power meter, shop, buttons.
 import * as Phaser from 'phaser';
 import { ITEMS, POWER_ITEMS, POWER_TIERS, SHOVEL_REFUND } from '../data/catalog.js';
-import { AUGUSTUS_UPGRADES } from '../data/augustus.js';
+import { AGENT_TYPES } from '../data/agents.js';
 import { PLAYER_UPGRADES } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
@@ -58,9 +58,9 @@ export class UIScene extends Phaser.Scene {
       onBuy: (itemId) => this.dorm.buy(itemId),
       getOrders: () => this.dorm.orders,
       getPower: () => ({ next: this.dorm.nextPower(), pending: this.dorm.powerPending() }),
-      getAugustus: () => this.dorm.augustusInfo(),
-      onHire: () => this.dorm.hireAugustus(),
-      onUpgrade: (kind) => this.dorm.buyUpgrade(kind),
+      getAgents: () => this.dorm.agentsInfo(),
+      onHire: (type) => this.dorm.hireAgent(type),
+      onAgentUpgrade: (type, kind) => this.dorm.buyAgentUpgrade(type, kind),
       getPlayerLevels: () => this.dorm.playerLevels,
       onPlayerUpgrade: (kind) => this.dorm.buyPlayerUpgrade(kind),
     });
@@ -97,13 +97,13 @@ export class UIScene extends Phaser.Scene {
       }
     };
     const onPower = (power) => this.showBanner('Power upgraded!', `${power.name}: up to ${power.capacity} W`);
-    const onArrive = () => this.showBanner('Augustus has arrived!', 'He works your machines and carries cash to the hamper. Upgrade him in the shop.', PURPLE);
-    const onUpgrade = (kind, level) => this.showBanner('Augustus upgraded!', `${AUGUSTUS_UPGRADES[kind].name} is now level ${level}.`, PURPLE);
+    const onArrive = (agent) => this.showBanner(`${agent.name} has arrived!`, 'Works your machines and carries cash to the hamper. Upgrade agents in the shop.', PURPLE);
+    const onUpgrade = (type, kind, level) => this.showBanner('Agent upgraded!', `${AGENT_TYPES[type].upgrades[kind].name} is now level ${level}.`, PURPLE);
     const onPlayerUpgrade = (kind, level) => this.showBanner('Upgraded!', `${PLAYER_UPGRADES[kind].name}: ${PLAYER_UPGRADES[kind].describe(level).toLowerCase()}.`);
     this.dorm.events.on('breaker-tripped', onTrip);
     this.dorm.events.on('power-installed', onPower);
-    this.dorm.events.on('augustus-arrived', onArrive);
-    this.dorm.events.on('augustus-upgraded', onUpgrade);
+    this.dorm.events.on('agent-arrived', onArrive);
+    this.dorm.events.on('agent-upgraded', onUpgrade);
     this.dorm.events.on('player-upgraded', onPlayerUpgrade);
 
     this.renderCash(gameState.cash);
@@ -117,8 +117,8 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('shop', onShop);
       this.dorm.events.off('breaker-tripped', onTrip);
       this.dorm.events.off('power-installed', onPower);
-      this.dorm.events.off('augustus-arrived', onArrive);
-      this.dorm.events.off('augustus-upgraded', onUpgrade);
+      this.dorm.events.off('agent-arrived', onArrive);
+      this.dorm.events.off('agent-upgraded', onUpgrade);
       this.dorm.events.off('player-upgraded', onPlayerUpgrade);
       this.dorm.events.off('question', onQuestion);
       this.input.keyboard.off('keydown', onKey);
@@ -132,7 +132,10 @@ export class UIScene extends Phaser.Scene {
     else if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
     else if (carryBox) text = Object.hasOwn(POWER_ITEMS, carryBox.itemId) ? 'Take the box to the breaker panel' : 'Carry the box to an empty plot';
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;
-    else if (this.dorm.augustusArrival !== null) text = `Augustus arrives in ${Math.ceil(this.dorm.augustusArrival)}s`;
+    else if (this.dorm.arrivals.length) {
+      const next = this.dorm.arrivals.reduce((a, b) => (b.remaining < a.remaining ? b : a));
+      text = `${AGENT_TYPES[next.type].name} arrives in ${Math.ceil(next.remaining)}s`;
+    }
     if (this.shop.visible) text = ''; // the shop lists deliveries itself
     this.deliveryChip.setVisible(Boolean(text));
     if (text && this.deliveryChip.text !== text) this.deliveryChip.setText(text);

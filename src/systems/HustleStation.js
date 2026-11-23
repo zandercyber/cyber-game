@@ -94,6 +94,7 @@ export class HustleStation {
    */
   update(dt, { canWork, near, handsFull, rate = 1, bonus = 1, helper = false }) {
     const h = this.heatCfg;
+    this.helperWorking = helper && canWork; // shows a compact panel (bars only) while an agent works it
     if (!this.enabled) {
       this.working = false;
       this.panel.setVisible(false);
@@ -228,7 +229,9 @@ export class HustleStation {
   }
 
   render(dt, { near, handsFull }) {
-    this.panel.setVisible(near || this.broken || (this.overheated && this.powered));
+    this.panel.setVisible(near || this.broken || (this.overheated && this.powered) || this.helperWorking);
+    // Job titles only when you're close, or for something that needs you.
+    this.title.setVisible(near || this.broken || Boolean(this.awaiting) || this.overheated || !this.powered);
     this.progressFill.width = Math.min(1, this.broken ? this.repairProgress : this.progress) * BAR_W;
     this.progressFill.fillColor = this.broken ? 0xf97316 : 0x5ff0ff;
     if (this.heatCfg) {

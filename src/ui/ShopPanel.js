@@ -1,11 +1,11 @@
 // The shop screen: opens when you stand at the corner laptop (after it unlocks).
-// Two tabs:
+// Three tabs:
 //   Gear: machines plus the next power upgrade; orders arrive later as a box at the door.
-//   Upgrades: your carry limit and speed; hire Augustus, then upgrade his speed,
-//   profit and energy.
+//   Agents: hire AI agents (up to 3, any mix) and upgrade each type. Pick a type with the chips.
+//   You: your own upgrades (carry limit, speed).
 
 import { ITEMS, orderable } from '../data/catalog.js';
-import { AUGUSTUS, AUGUSTUS_UPGRADES, MAX_LEVEL, UPGRADE_IDS } from '../data/augustus.js';
+import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX } from '../data/agents.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
 
@@ -15,26 +15,27 @@ const Y = 100;
 const W = 520;
 const ROW_H = 86;
 const HEADER_H = 70;
+const CHIPS_H = 40; // the agent-type picker at the top of the Agents tab
 const TEXT_W = W - 96 - 140; // leave room for the price button
 const GREEN = 0x16a34a;
 const GREY = 0x334155;
+const ACTIVE = 0x0e7490;
 
-// Thumbnails for the Upgrades tab: [texture, frame, scale].
-const UPGRADE_THUMBS = { speed: ['augustus', 1, 2.4], profit: ['augustus', 0, 2.4], energy: ['augustus', 3, 2.4] };
 const PLAYER_THUMBS = { carry: ['item-cash', undefined, 1.3], speed: ['player', 0, 1.1] };
 const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 
+// Thumbnail per agent upgrade: the agent's own frames (speed = side view, energy = asleep).
+function agentThumb(type, kind) {
+  const { texture, frames } = AGENT_TYPES[type];
+  const frame = { speed: frames.side, energy: frames.sleep?.[0] }[kind] ?? frames.front;
+  return [texture, frame, 2.4];
+}
+
 export class ShopPanel {
-  constructor(scene, { onBuy, getOrders, getPower, getAugustus, onHire, onUpgrade, getPlayerLevels, onPlayerUpgrade }) {
+  constructor(scene, callbacks) {
     this.scene = scene;
-    this.onBuy = onBuy;
-    this.getOrders = getOrders;
-    this.getPower = getPower; // () => ({ next, pending })
-    this.getAugustus = getAugustus; // () => ({ hired, arriving, levels, status })
-    this.onHire = onHire;
-    this.onUpgrade = onUpgrade;
-    this.getPlayerLevels = getPlayerLevels; // () => { carry, speed }
-    this.onPlayerUpgrade = onPlayerUpgrade;
+    // onBuy, getOrders, getPower, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade
+    Object.assign(this, callbacks);
     const ids = Object.keys(ITEMS);
     const rowCount = ids.length + 1; // machines + one power row
     this.height = HEADER_H + rowCount * ROW_H + 64;
@@ -49,60 +50,86 @@ export class ShopPanel {
     this.root.add(scene.add.text(20, 14, 'Shop', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: '#5ff0ff' }));
     this.subtitle = scene.add.text(20, 48, '', { fontFamily: FONT, fontSize: '14px', color: '#94a3b8' });
     this.root.add(this.subtitle);
-    this.tabButtons = [this.addTab('gear', 'Gear', W - 236, 96), this.addTab('upgrades', 'Upgrades', W - 132, 112)];
+    this.tabButtons = [
+      this.addButton(W - 316, 14, 96, 36, 'Gear', () => this.setTab('gear'), 'gear'),
+      this.addButton(W - 212, 14, 96, 36, 'Agents', () => this.setTab('agents'), 'agents'),
+      this.addButton(W - 108, 14, 88, 36, 'You', () => this.setTab('you'), 'you'),
+    ];
 
     // Gear tab.
     this.rows = ids.map((id, i) => this.addRow(HEADER_H + i * ROW_H, { tab: 'gear', id, thumb: [`station-${id}`] }));
     this.powerRow = this.addRow(HEADER_H + ids.length * ROW_H, { tab: 'gear', id: null, thumb: ['item-power-strip'] });
     this.rows.push(this.powerRow);
-    // Upgrades tab: yours first, then Augustus (the hire row until he's hired).
-    this.playerRows = PLAYER_UPGRADE_IDS.map((key, i) =>
-      this.addRow(HEADER_H + i * ROW_H, { tab: 'upgrades', action: `you:${key}`, thumb: PLAYER_THUMBS[key] }));
-    const augTop = HEADER_H + PLAYER_UPGRADE_IDS.length * ROW_H;
-    this.hireRow = this.addRow(augTop, { tab: 'upgrades', action: 'hire', thumb: ['augustus', 0, 2.4] });
-    this.upgradeRows = UPGRADE_IDS.map((key, i) =>
-      this.addRow(augTop + i * ROW_H, { tab: 'upgrades', action: key, thumb: UPGRADE_THUMBS[key] }));
-    this.rows.push(...this.playerRows, this.hireRow, ...this.upgradeRows);
-
     this.ordersText = scene.add.text(20, HEADER_H + rowCount * ROW_H + 14, '', {
       fontFamily: FONT, fontSize: '15px', color: '#fbbf24', lineSpacing: 4,
     });
-    this.agentText = scene.add.text(20, augTop + UPGRADE_IDS.length * ROW_H + 14, '', {
-      fontFamily: FONT, fontSize: '15px', color: '#c4b5fd', lineSpacing: 4, wordWrap: { width: W - 40 },
+
+    // Agents tab: a chip per agent type, then that type's hire row and upgrades.
+    this.agentType = AGENT_TYPE_IDS[0];
+    this.agentChips = AGENT_TYPE_IDS.map((type, i) =>
+      this.addButton(20 + i * 126, HEADER_H, 116, 32, AGENT_TYPES[type].name, () => this.pickAgentType(type), type));
+    this.agentCount = scene.add.text(W - 20, HEADER_H + 16, '', { fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#c4b5fd' })
+      .setOrigin(1, 0.5);
+    const top = HEADER_H + CHIPS_H;
+    this.hireRows = {};
+    this.agentRows = {};
+    for (const type of AGENT_TYPE_IDS) {
+      const { texture, frames, upgrades } = AGENT_TYPES[type];
+      this.hireRows[type] = this.addRow(top, { tab: 'agents', agentType: type, action: 'hire', thumb: [texture, frames.front, 2.4] });
+      this.agentRows[type] = Object.keys(upgrades).map((kind, i) =>
+        this.addRow(top + (i + 1) * ROW_H, { tab: 'agents', agentType: type, action: kind, thumb: agentThumb(type, kind) }));
+      this.rows.push(this.hireRows[type], ...this.agentRows[type]);
+    }
+    this.rosterText = scene.add.text(20, top + 4 * ROW_H + 10, '', {
+      fontFamily: FONT, fontSize: '14px', color: '#c4b5fd', lineSpacing: 3, wordWrap: { width: W - 40 },
     });
-    this.root.add([this.ordersText, this.agentText]);
-    this.tab = 'gear';
+
+    // You tab.
+    this.playerRows = PLAYER_UPGRADE_IDS.map((key, i) =>
+      this.addRow(HEADER_H + i * ROW_H, { tab: 'you', action: `you:${key}`, thumb: PLAYER_THUMBS[key] }));
+    this.rows.push(...this.playerRows);
+
+    this.root.add([this.ordersText, this.agentCount, this.rosterText]);
     this.setTab('gear');
   }
 
-  addTab(id, label, x, width) {
+  // A small toggle button (tabs and agent chips).
+  addButton(x, y, width, height, label, onTap, id) {
     const s = this.scene;
-    const btn = s.add.rectangle(x, 14, width, 36, GREY).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    const text = s.add.text(x + width / 2, 32, label, {
-      fontFamily: FONT, fontSize: '17px', fontStyle: 'bold', color: '#e6f4ff',
+    const btn = s.add.rectangle(x, y, width, height, GREY).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    const text = s.add.text(x + width / 2, y + height / 2, label, {
+      fontFamily: FONT, fontSize: '16px', fontStyle: 'bold', color: '#e6f4ff',
     }).setOrigin(0.5);
     btn.on('pointerup', () => {
-      if (this.root.visible) this.setTab(id);
+      if (this.root.visible && btn.input?.enabled) onTap();
     });
     this.root.add([btn, text]);
     return { id, btn, text };
   }
 
+  styleButton({ btn, text }, active) {
+    btn.setFillStyle(active ? ACTIVE : GREY);
+    text.setColor(active ? '#ffffff' : '#94a3b8');
+  }
+
   setTab(tab) {
     this.tab = tab;
-    for (const { id, btn, text } of this.tabButtons) {
-      btn.setFillStyle(id === tab ? 0x0e7490 : GREY);
-      text.setColor(id === tab ? '#ffffff' : '#94a3b8');
-    }
-    this.subtitle.setText(tab === 'gear'
-      ? 'Orders arrive as a box at the door. Carry it to where it goes.'
-      : 'Upgrades take effect right away. No delivery.');
+    for (const b of this.tabButtons) this.styleButton(b, b.id === tab);
+    this.subtitle.setText({
+      gear: 'Orders arrive as a box at the door. Carry it to where it goes.',
+      agents: 'Hire up to 3 agents, any mix. Upgrades apply to every agent of that type.',
+      you: 'Upgrades take effect right away.',
+    }[tab]);
     this.refresh();
   }
 
-  // One row: picture, name, info line, and a price button. Rows whose contents
-  // change (power, hire, upgrades) are filled in by refresh().
-  addRow(y, { tab, id = null, action = null, thumb }) {
+  pickAgentType(type) {
+    this.agentType = type;
+    this.refresh();
+  }
+
+  // One row: picture, name, info line, and a price button. Its text is filled in by refresh().
+  addRow(y, { tab, id = null, action = null, agentType = null, thumb }) {
     const s = this.scene;
     const [key, frame, scale] = thumb;
     const image = s.add.image(52, y + ROW_H / 2, key, frame);
@@ -119,14 +146,14 @@ export class ShopPanel {
       fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: '#ffffff',
     }).setOrigin(0.5);
     const divider = s.add.rectangle(20, y + ROW_H - 1, W - 40, 1, 0xffffff, 0.08).setOrigin(0, 0.5);
-    const row = { tab, id, action, thumb: image, bolt, name, info, btn, label, divider, shown: true, boltWanted: false, flashUntil: 0 };
+    const row = { tab, id, action, agentType, thumb: image, bolt, name, info, btn, label, shown: true, boltWanted: false, flashUntil: 0 };
     row.parts = [image, name, info, btn, label, divider];
     btn.on('pointerup', () => {
-      if (!this.root.visible || this.tab !== row.tab || !row.shown) return;
+      if (!this.root.visible || !this.isOn(row)) return;
       let ok = false;
-      if (row.action === 'hire') ok = this.onHire();
+      if (row.action === 'hire') ok = this.onHire(row.agentType);
       else if (row.action?.startsWith('you:')) ok = this.onPlayerUpgrade(row.action.slice(4));
-      else if (row.action) ok = this.onUpgrade(row.action);
+      else if (row.agentType) ok = this.onAgentUpgrade(row.agentType, row.action);
       else if (row.id) ok = this.onBuy(row.id);
       if (ok) {
         row.flashUntil = s.time.now + 900;
@@ -137,6 +164,10 @@ export class ShopPanel {
     });
     this.root.add([...row.parts, bolt]);
     return row;
+  }
+
+  isOn(row) {
+    return row.tab === this.tab && row.shown && (!row.agentType || row.agentType === this.agentType);
   }
 
   get visible() {
@@ -160,18 +191,28 @@ export class ShopPanel {
 
   refresh() {
     if (this.tab === 'gear') this.refreshGear();
-    else this.refreshUpgrades();
+    else if (this.tab === 'agents') this.refreshAgents();
+    else this.refreshYou();
     // Only the current tab's rows are visible and tappable.
     for (const row of this.rows) {
-      const on = row.tab === this.tab && row.shown;
+      const on = this.isOn(row);
       for (const part of row.parts) part.setVisible(on);
       row.thumb.setVisible(on && !row.boltWanted);
       row.bolt.setVisible(on && row.boltWanted);
       if (on) row.btn.setInteractive({ useHandCursor: true });
       else row.btn.disableInteractive();
     }
+    const agents = this.tab === 'agents';
+    for (const chip of this.agentChips) {
+      chip.btn.setVisible(agents);
+      chip.text.setVisible(agents);
+      if (agents) chip.btn.setInteractive({ useHandCursor: true });
+      else chip.btn.disableInteractive();
+      this.styleButton(chip, chip.id === this.agentType);
+    }
+    this.agentCount.setVisible(agents);
+    this.rosterText.setVisible(agents);
     this.ordersText.setVisible(this.tab === 'gear');
-    this.agentText.setVisible(this.tab === 'upgrades');
   }
 
   setButton(row, text, canBuy) {
@@ -226,35 +267,36 @@ export class ShopPanel {
     row.info.setText(info).setColor('#94a3b8');
   }
 
-  refreshUpgrades() {
-    // Yours.
+  refreshAgents() {
+    const info = this.getAgents();
+    const full = info.count >= info.max;
+    this.agentCount.setText(`Agents ${info.count}/${info.max}`);
+    this.rosterText.setText(info.roster.length ? info.roster.join('\n') : 'No agents yet.');
+
+    for (const type of AGENT_TYPE_IDS) {
+      const cfg = AGENT_TYPES[type];
+      const t = info.types[type];
+      const hire = this.hireRows[type];
+      hire.name.setText(t.owned + t.coming ? `Hire another ${cfg.name}` : `Hire ${cfg.name}`);
+      let line = cfg.blurb;
+      if (t.coming) line = `On the way: floats in through the door in ${Math.ceil(t.nextArrival)}s`;
+      else if (full) line = 'You have 3 agents, the most the dorm can run.';
+      hire.info.setText(line);
+      this.setButton(hire, full ? 'Full' : `$${t.nextPrice}`, !full && gameState.cash >= t.nextPrice);
+      // Upgrades show once you have one of this type.
+      for (const row of this.agentRows[type]) {
+        row.shown = t.owned > 0;
+        if (row.shown) this.refreshLevelRow(row, cfg.upgrades[row.action], t.levels[row.action], AGENT_LEVEL_MAX);
+      }
+    }
+  }
+
+  refreshYou() {
     const mine = this.getPlayerLevels();
     for (const row of this.playerRows) {
       const key = row.action.slice(4);
       this.refreshLevelRow(row, PLAYER_UPGRADES[key], mine[key], PLAYER_MAX_LEVEL);
     }
-
-    // Augustus.
-    const aug = this.getAugustus();
-    const hired = aug.hired;
-    this.hireRow.shown = !hired;
-    for (const row of this.upgradeRows) row.shown = hired;
-
-    if (!hired) {
-      const coming = aug.arriving !== null;
-      this.hireRow.name.setText('Hire Augustus');
-      this.hireRow.info.setText(coming
-        ? `On his way: floats in through the door in ${Math.ceil(aug.arriving)}s`
-        : 'AI agent on a cloud. Works your machines and carries cash to the hamper.');
-      this.setButton(this.hireRow, coming ? 'On the way' : `$${AUGUSTUS.hirePrice}`,
-        !coming && gameState.cash >= AUGUSTUS.hirePrice);
-      this.agentText.setText('Hire Augustus to unlock his upgrades.');
-      return;
-    }
-    for (const row of this.upgradeRows) {
-      this.refreshLevelRow(row, AUGUSTUS_UPGRADES[row.action], aug.levels[row.action], MAX_LEVEL);
-    }
-    this.agentText.setText(`Augustus: ${aug.status}`);
   }
 
   // Name with level, what the next level does, and its price.

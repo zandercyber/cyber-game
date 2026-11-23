@@ -6,7 +6,7 @@
 // and falls back to defaults for anything that doesn't make sense.
 
 import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
-import { AUGUSTUS, MAX_LEVEL, UPGRADE_IDS, augustusStats } from '../data/augustus.js';
+import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels } from '../data/agents.js';
 import { QUESTIONS } from '../data/questions.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 
@@ -83,24 +83,35 @@ export function readSave({ plotIds, pileMax }) {
     .map((o) => ({ itemId: o.itemId, remaining: num(o.remaining, 0, orderable(o.itemId).deliverySeconds) }));
   const boxes = (Array.isArray(raw.boxes) ? raw.boxes : []).slice(0, 10).filter(isOrderable);
 
-  // Augustus: hired (or on his way), upgrade levels, energy, what he's carrying.
-  let augustus = null;
-  const a = obj(raw.augustus);
-  if (a.hired === true || Number.isFinite(a.arriving)) {
-    const lv = obj(a.levels);
-    const levels = Object.fromEntries(UPGRADE_IDS.map((k) => [k, int(lv[k], 0, MAX_LEVEL)]));
-    const maxAwake = augustusStats(levels).awakeSeconds;
-    augustus = {
-      hired: a.hired === true,
-      arriving: a.hired === true ? null : num(a.arriving, 0, AUGUSTUS.arriveSeconds),
-      levels,
+  // AI agents: who's here, who's on the way, and each type's upgrade levels.
+  // Older saves stored a single "augustus" field; it's read as one agent.
+  const legacy = obj(raw.augustus);
+  const rawAgentLevels = obj(raw.agentLevels);
+  const agentLevels = Object.fromEntries(AGENT_TYPE_IDS.map((type) => {
+    const src = obj(Object.hasOwn(rawAgentLevels, type) ? rawAgentLevels[type] : type === 'augustus' ? legacy.levels : null);
+    const levels = Object.fromEntries(Object.keys(noAgentLevels(type)).map((k) => [k, int(src[k], 0, AGENT_LEVEL_MAX)]));
+    return [type, levels];
+  }));
+  let rawAgents = Array.isArray(raw.agents) ? raw.agents : [];
+  let rawArrivals = Array.isArray(raw.arrivals) ? raw.arrivals : [];
+  if (!Array.isArray(raw.agents) && legacy.hired === true) rawAgents = [{ ...legacy, type: 'augustus' }];
+  if (!Array.isArray(raw.arrivals) && legacy.hired !== true && Number.isFinite(legacy.arriving)) {
+    rawArrivals = [{ type: 'augustus', remaining: legacy.arriving }];
+  }
+  const agents = rawAgents.map(obj).filter((a) => isAgentType(a.type)).slice(0, MAX_AGENTS).map((a) => {
+    const cfg = AGENT_TYPES[a.type];
+    const maxAwake = cfg.stats(agentLevels[a.type]).awakeSeconds;
+    return {
+      type: a.type,
       awake: num(a.awake, 0, maxAwake, maxAwake),
-      nap: num(a.nap, 0, AUGUSTUS.napSeconds),
+      nap: num(a.nap, 0, cfg.napSeconds ?? 0),
       carried: int(a.carried, 0, MAX_CASH),
       // Checked against the room by the scene before it's used.
       position: Number.isFinite(a.x) && Number.isFinite(a.y) ? { x: a.x, y: a.y } : null,
     };
-  }
+  });
+  const arrivals = rawArrivals.map(obj).filter((a) => isAgentType(a.type)).slice(0, MAX_AGENTS - agents.length)
+    .map((a) => ({ type: a.type, remaining: num(a.remaining, 0, AGENT_TYPES[a.type].arriveSeconds) }));
 
   // Questions already seen per group: unique whole numbers inside that group's bank.
   const rawSeen = obj(raw.questionsSeen);
@@ -127,7 +138,9 @@ export function readSave({ plotIds, pileMax }) {
     carryBox: isOrderable(raw.carryBox) ? raw.carryBox : null,
     powerTier: int(raw.powerTier, 0, POWER_TIERS.length - 1),
     tripped: raw.tripped === true, // older saves don't have it: not tripped
-    augustus,
+    agents,
+    arrivals,
+    agentLevels,
     questionsSeen,
     playerLevels,
     carried: int(raw.carried, 0, MAX_CASH),

@@ -1,4 +1,4 @@
-// Augustus, the AI agent helper. He rides his cloud around the room, works
+// Augustus, the first AI agent type (see agents.js). He rides his cloud around the room, works
 // machines (slower than you), carries cash piles to the hamper, and naps for a
 // minute to "reset credits" when his energy runs out.
 // All numbers are first guesses to tune.
@@ -34,7 +34,6 @@ export const AUGUSTUS_UPGRADES = {
     describe: (lvl) => `Awake ${AUGUSTUS.awakeSeconds + 30 * lvl}s between naps`,
   },
 };
-export const UPGRADE_IDS = Object.keys(AUGUSTUS_UPGRADES);
 
 /** What Augustus can do at the given upgrade levels. */
 export function augustusStats(levels) {
@@ -45,5 +44,3 @@ export function augustusStats(levels) {
     awakeSeconds: AUGUSTUS.awakeSeconds + 30 * levels.energy,
   };
 }
-
-export const noLevels = () => ({ speed: 0, profit: 0, energy: 0 });
