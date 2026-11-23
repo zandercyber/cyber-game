@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { DORM } from '../data/dorm.js';
 import {
-  ITEMS, POWER_TIERS, POWER_ITEMS, SMALL_IMAGES, SHOVEL_REFUND, STARTER_LAPTOP_WATTS, orderable,
+  ITEMS, POWER_TIERS, POWER_ITEMS, FOAM_ITEMS, FOAM_LEVELS, FOAM_MAX_LEVEL, SMALL_IMAGES, SHOVEL_REFUND, STARTER_LAPTOP_WATTS, orderable,
 } from '../data/catalog.js';
 import { makeWalkableCheck, translatePolygon, centerY, pointInPolygon } from '../systems/geometry.js';
 import { Joystick } from '../systems/Joystick.js';
@@ -44,6 +44,8 @@ const OUTAGE_FLICKER = [[0, 0.14], [120, DIM], [330, 0.2], [430, DIM]]; // tripp
 const LIGHTS_ON = [[0, 0.04], [90, 0.2], [260, 0]]; // reset: lights stutter back on
 const stepAt = (steps, t) => steps.reduce((value, [ms, alpha]) => (t >= ms ? alpha : value), steps[0][1]);
 const isPower = (id) => typeof id === 'string' && Object.hasOwn(POWER_ITEMS, id);
+const isFoam = (id) => typeof id === 'string' && Object.hasOwn(FOAM_ITEMS, id);
+const isMachine = (id) => typeof id === 'string' && Object.hasOwn(ITEMS, id); // goes on a plot
 
 export class DormScene extends Phaser.Scene {
   constructor() {
@@ -105,7 +107,13 @@ export class DormScene extends Phaser.Scene {
       this.addSpot('starterDesk', DORM.starterDesk, 'Work', null, { hiddenWhenNear: true }),
       // Labeled when you're next to it, when it trips, or when you carry a power box.
       this.addSpot('breaker', DORM.breaker, 'Breaker', null, { hiddenWhenFar: true }),
+      // Only labeled while you carry a foam box.
+      this.addSpot('foamWall', DORM.foamWall, 'Put up foam', null, { hiddenWhenFar: true }),
     ];
+    this.foamSpot = this.spots.find((s) => s.id === 'foamWall');
+    this.foamSpot.nearAlpha = 0;
+    this.foamLevel = 0; // foam panels on the wall above the bed (0..FOAM_MAX_LEVEL)
+    this.foamTiles = [];
     this.setupBreaker();
 
     this.keys = this.input.keyboard.addKeys({
@@ -188,6 +196,7 @@ export class DormScene extends Phaser.Scene {
     this.updateOrders(dt);
     this.updateBoxes();
     this.tryInstall();
+    this.updateFoamSpot();
     this.updateBreaker(dt);
     this.updateLights();
     this.clock.update(dt);
@@ -500,8 +509,9 @@ export class DormScene extends Phaser.Scene {
   buy(itemId) {
     const item = orderable(itemId);
     if (!item || !gameState.shopUnlocked) return false;
-    // Power: only the next upgrade, one at a time.
+    // Power and foam: only the next upgrade, one at a time.
     if (isPower(itemId) && (itemId !== this.nextPower()?.id || this.powerPending())) return false;
+    if (isFoam(itemId) && (itemId !== this.nextFoam()?.id || this.foamPending())) return false;
     if (!gameState.spend(item.price)) return false;
     this.orders.push({ itemId, remaining: item.deliverySeconds });
     this.events.emit('order-placed', itemId);
@@ -559,7 +569,7 @@ export class DormScene extends Phaser.Scene {
         this.nudge('Hands full: stash your cash first', box.x, box.y - 100);
         return;
       }
-      if (!isPower(box.itemId) && !this.hasEmptyPlot) {
+      if (isMachine(box.itemId) && !this.hasEmptyPlot) {
         this.nudge('No empty plot: dig up a machine with the shovel first', box.x, box.y - 100);
         return;
       }
@@ -590,7 +600,7 @@ export class DormScene extends Phaser.Scene {
     this.carryBox = { itemId: box.itemId, sprite: box.sprite };
     this.leftDoor = false;
     this.player.setCarrying(true);
-    const where = isPower(box.itemId) ? 'take it to the breaker' : 'put it on an empty plot';
+    const where = isPower(box.itemId) ? 'take it to the breaker' : isFoam(box.itemId) ? 'take it to the bed' : 'put it on an empty plot';
     this.floatText(`${orderable(box.itemId).name}: ${where}`, this.player.x, this.player.y - 140, '#5ff0ff');
   }
 
@@ -600,6 +610,10 @@ export class DormScene extends Phaser.Scene {
     if (!this.carryBox) return;
     if (isPower(this.carryBox.itemId)) {
       if (this.spotNear('breaker')) this.installPower();
+      return;
+    }
+    if (isFoam(this.carryBox.itemId)) {
+      if (this.spotNear('foamWall')) this.installFoam();
       return;
     }
     const { width: w, height: h } = DORM.plotSize;
@@ -868,6 +882,58 @@ export class DormScene extends Phaser.Scene {
   }
 
   // Carrying a power box to the breaker panel installs the upgrade.
+  // ---------- Foam panels ----------
+
+  nextFoam() {
+    return FOAM_LEVELS[this.foamLevel] ?? null;
+  }
+
+  foamPending() {
+    return [...this.orders.map((o) => o.itemId), ...this.boxes.map((b) => b.itemId), this.carryBox?.itemId].some(isFoam);
+  }
+
+  installFoam() {
+    const { itemId, sprite } = this.carryBox;
+    this.carryBox = null;
+    sprite.destroy();
+    if (this.carried === 0) this.player.setCarrying(false);
+    this.foamLevel = Math.min(FOAM_MAX_LEVEL, Math.max(this.foamLevel, FOAM_ITEMS[itemId].level));
+    this.drawFoam(true);
+    const { labelX, labelY } = DORM.foamWall;
+    this.floatText('Foam panels up!', labelX, labelY + 60, '#4ade80');
+    this.events.emit('foam-installed', this.foamLevel);
+  }
+
+  // The tiles on the wall above the bed: 2x2 at level 1, 3x2 at level 2, 3x3 at level 3.
+  // Charcoal and navy alternate like a checkerboard. New tiles pop in when animate is set.
+  drawFoam(animate = false) {
+    const { tilesX, tilesY, tileW, tileH } = DORM.foamWall;
+    const layout = [[], [[0.5, 1], [1.5, 1], [0.5, 2], [1.5, 2]], [[0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]],
+      [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]]][this.foamLevel];
+    for (const t of this.foamTiles) t.destroy();
+    this.foamTiles = layout.map(([c, r], i) => {
+      const x = tilesX + c * tileW + tileW / 2;
+      const y = tilesY + r * tileH + tileH / 2;
+      const key = (Math.floor(c) + r) % 2 ? 'foam-navy' : 'foam-charcoal';
+      const tile = this.add.image(x, y, key).setDepth(-9500); // on the wall, behind everything else
+      if (animate) {
+        tile.setScale(0.2).setAlpha(0);
+        this.tweens.add({ targets: tile, scale: 1, alpha: 1, duration: 300, delay: i * 60, ease: 'Back.out' });
+      }
+      return tile;
+    });
+  }
+
+  // The "Put up foam" label shows only while you carry a foam box.
+  updateFoamSpot() {
+    const show = Boolean(this.carryBox && isFoam(this.carryBox.itemId));
+    const spot = this.foamSpot;
+    spot.farAlpha = show ? 1 : 0;
+    spot.nearAlpha = show ? 1 : 0;
+    const alpha = show ? 1 : 0;
+    if (spot.container.alpha !== alpha) spot.container.setAlpha(alpha);
+  }
+
   installPower() {
     const { itemId, sprite } = this.carryBox;
     this.carryBox = null;
@@ -1009,6 +1075,7 @@ export class DormScene extends Phaser.Scene {
       playerLevels: this.playerLevels,
       neighbor: this.neighbor.saveState,
       clock: this.clock.saveState,
+      foamLevel: this.foamLevel,
     });
   }
 
@@ -1050,6 +1117,8 @@ export class DormScene extends Phaser.Scene {
     if (save.tripped) this.trip({ silent: true });
     this.questionsSeen = save.questionsSeen;
     this.playerLevels = { ...save.playerLevels };
+    this.foamLevel = save.foamLevel;
+    this.drawFoam();
     if (save.clock) this.clock.restore(save.clock); // before the neighbor, so a visit at night shows the night sky
     this.updateNight();
     this.neighbor.restore(save.neighbor);
@@ -1141,7 +1210,7 @@ export class DormScene extends Phaser.Scene {
       this.carryLabel.setPosition(this.player.x + ox, this.player.y - 70 - this.carryStack.length * 8);
     }
     // Empty plots glow bigger while you hold a box, to show where it can go.
-    const scale = this.carryBox && !isPower(this.carryBox.itemId) ? 1.08 : 1;
+    const scale = this.carryBox && isMachine(this.carryBox.itemId) ? 1.08 : 1;
     for (const p of this.plots) if (!p.itemId && p.outline.scale !== scale) p.outline.setScale(scale);
   }
 
@@ -1240,7 +1309,7 @@ export class DormScene extends Phaser.Scene {
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
   // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, L the neighbor comes over now, Q questions on every job,
-  // T skip ahead 2 hours on the clock.
+  // T skip ahead 2 hours on the clock, F put up the next level of foam panels now.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1265,6 +1334,11 @@ export class DormScene extends Phaser.Scene {
       if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'augustus', remaining: 0.1 });
     });
     this.input.keyboard.on('keydown-T', () => this.clock.advance(120)); // 2 game hours
+    this.input.keyboard.on('keydown-F', () => { // next foam level now
+      if (this.foamLevel >= FOAM_MAX_LEVEL) return;
+      this.foamLevel += 1;
+      this.drawFoam(true);
+    });
     this.input.keyboard.on('keydown-L', () => { // the neighbor comes over now
       if (this.neighbor.state === 'calm') this.neighbor.startComing();
     });
@@ -1287,7 +1361,7 @@ export class DormScene extends Phaser.Scene {
     g.lineStyle(2, 0xff3355, 0.9);
     for (const shape of this.blocked) g.strokePoints(pts(shape), true);
     g.lineStyle(2, 0xffd000, 0.8);
-    for (const spot of [DORM.stash, DORM.breaker, DORM.deliverySpot, ...this.stations.map((s) => s.spot)]) {
+    for (const spot of [DORM.stash, DORM.breaker, DORM.deliverySpot, DORM.foamWall, ...this.stations.map((s) => s.spot)]) {
       g.strokeCircle(spot.x, spot.y, spot.reach ?? 20);
     }
   }
