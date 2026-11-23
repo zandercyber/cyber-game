@@ -6,7 +6,7 @@
 // and falls back to defaults for anything that doesn't make sense.
 
 import { ITEMS, POWER_TIERS, FOAM_MAX_LEVEL, orderable } from '../data/catalog.js';
-import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels } from '../data/agents.js';
+import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels, hirePrice, agentName } from '../data/agents.js';
 import { QUESTIONS } from '../data/questions.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { CLOCK, MINUTES_PER_DAY } from '../data/clock.js';
@@ -101,6 +101,18 @@ export function readSave({ plotIds, pileMax }) {
   if (!Array.isArray(raw.arrivals) && legacy.hired !== true && Number.isFinite(legacy.arriving)) {
     rawArrivals = [{ type: 'augustus', remaining: legacy.arriving }];
   }
+  const OLD_MAX_AGENTS = 3;
+  // The dorm fits MAX_AGENTS (it used to fit 3). Agents past the limit, last hired first, go home
+  // and you get back what you paid for each (its hire price when it was hired).
+  const hired = [...rawAgents, ...rawArrivals].map(obj).filter((a) => isAgentType(a.type));
+  const sentHome = [];
+  let refund = 0;
+  hired.forEach((a, i) => {
+    const nth = hired.slice(0, i).filter((b) => b.type === a.type).length; // how many of this type came before it
+    if (i < MAX_AGENTS || i >= OLD_MAX_AGENTS) return; // only the ones a real save could have had
+    refund += hirePrice(a.type, nth);
+    sentHome.push(agentName(a.type, nth));
+  });
   const agents = rawAgents.map(obj).filter((a) => isAgentType(a.type)).slice(0, MAX_AGENTS).map((a) => {
     const cfg = AGENT_TYPES[a.type];
     const maxAwake = cfg.stats(agentLevels[a.type]).awakeSeconds;
@@ -168,6 +180,7 @@ export function readSave({ plotIds, pileMax }) {
     tripped: raw.tripped === true, // older saves don't have it: not tripped
     agents,
     arrivals,
+    agentsSentHome: { names: sentHome, refund },
     agentLevels,
     questionsSeen,
     playerLevels,
