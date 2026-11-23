@@ -1,16 +1,23 @@
-// The neighbor next door (numbers in src/data/neighbor.js).
-//   calm     -> loses patience while you're too loud; bangs on the wall halfway
-//   coming   -> a countdown: switch every machine off before they reach the door
-//   visiting -> stands in the doorway; anything still running = a noise fine
-//   leaving  -> fades out; then a grace period before they can get annoyed again
-// Until Zander's art arrives, the neighbor is drawn as a simple stand-in figure.
+// The neighbor next door (numbers in src/data/neighbor.js). He shows up at your window.
+//   calm     -> loses patience while you make noise (faster when louder); bangs on the wall halfway
+//   coming   -> the blinds go up and he knocks on the glass: switch every machine off before the countdown ends
+//   visiting -> looks in; anything still running = a noise fine (pointing), all quiet = arms crossed
+//   leaving  -> turns and walks off, the blinds come back down; patience starts over
+// Art: src/assets/neighbor/neighbor.png, 38x52 frames drawn at 2x (the player's size):
+//   0 knocking (faces left, into the room), 1 arms crossed, 2 pointing, 3 walking away.
+// window-open.png is the room's window with the blinds rolled up and the glass cut out;
+// window-sky.png sits behind it, and he stands between the two, so the sill hides his legs.
 
-import { NEIGHBOR, fineFor } from '../data/neighbor.js';
+import { NEIGHBOR, fineFor, noiseLevel } from '../data/neighbor.js';
 import { gameState } from '../state/GameState.js';
 
 const FONT = 'system-ui, sans-serif';
-const DOOR = { x: 812, y: 342 }; // the doorway on the back wall, where they stand
+const WINDOW = { x: 1185, y: 150 }; // top-left of the window overlay (room pixels)
+const SPOT = { x: 1257, y: 396 }; // where he stands outside, feet below the sill
+const KNOCK_X = 1265; // a bit to the right while knocking, so his fist is on the glass
 const WALL = { x: 170, y: 210 }; // where the banging comes from (their side of the wall)
+const FRAME = { knock: 0, crossed: 1, pointing: 2, away: 3 };
+const DEPTH = -9000; // just in front of the room picture, behind everything else
 
 export class Neighbor {
   constructor(scene) {
@@ -18,34 +25,26 @@ export class Neighbor {
     this.state = 'calm';
     this.annoyance = 0; // 0..100
     this.complaints = 0;
-    this.grace = 0;
     this.timer = 0;
     this.warned = false;
     this.knockTimer = 0;
 
-    this.figure = this.drawStandIn().setPosition(DOOR.x, DOOR.y).setDepth(DOOR.y).setVisible(false);
-    this.bubble = scene.add.text(DOOR.x, DOOR.y - 100, '', {
+    // Sky, then him, then the window frame on top (only shown while he's there).
+    this.sky = scene.add.image(WINDOW.x, WINDOW.y, 'window-sky').setOrigin(0).setDepth(DEPTH).setVisible(false);
+    this.figure = scene.add.sprite(SPOT.x, SPOT.y, 'neighbor', FRAME.knock)
+      .setOrigin(0.5, 1).setScale(2).setDepth(DEPTH + 1).setVisible(false);
+    this.window = scene.add.image(WINDOW.x, WINDOW.y, 'window-open').setOrigin(0).setDepth(DEPTH + 2).setVisible(false);
+
+    // What he says, just left of the window.
+    this.bubble = scene.add.text(WINDOW.x - 4, 262, '', {
       fontFamily: FONT, fontSize: '17px', fontStyle: 'bold', color: '#0b0e14', backgroundColor: '#f8fafc', padding: { x: 8, y: 4 },
-    }).setOrigin(0.5, 1).setDepth(12600).setVisible(false);
-    this.countdown = scene.add.text(DOOR.x, 70, '', {
+    }).setOrigin(1, 0.5).setDepth(12600).setVisible(false);
+    this.countdown = scene.add.text(812, 70, '', {
       fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: '#fde68a', backgroundColor: '#0b0e14dd', padding: { x: 10, y: 5 },
     }).setOrigin(0.5).setDepth(12600).setVisible(false);
   }
 
-  // A plain grumpy figure in a hoodie and pajama pants (placeholder art).
-  drawStandIn() {
-    const s = this.scene;
-    const g = s.add.graphics();
-    g.fillStyle(0x7f1d1d, 1).fillRect(-14, -30, 12, 30).fillRect(2, -30, 12, 30); // plaid pants
-    g.fillStyle(0x6b7280, 1).fillRoundedRect(-19, -66, 38, 40, 8); // hoodie
-    g.fillStyle(0xe0b48c, 1).fillCircle(0, -78, 13); // head
-    g.fillStyle(0x3f2a1d, 1).fillRect(-13, -93, 26, 8); // messy hair
-    g.lineStyle(3, 0x1f2937, 1).lineBetween(-9, -83, -2, -80).lineBetween(9, -83, 2, -80); // angry eyebrows
-    g.fillStyle(0xf8fafc, 1).fillRect(16, -52, 10, 12); // coffee mug
-    return s.add.container(0, 0, [g]);
-  }
-
-  /** True while you're supposed to be quiet (they're coming or at the door). */
+  /** True while you're supposed to be quiet (he's knocking or at the window). */
   get quiet() {
     return this.state === 'coming' || this.state === 'visiting';
   }
@@ -53,29 +52,25 @@ export class Neighbor {
   /** noise: what your machines are making right now. */
   update(dt, noise) {
     if (this.state === 'calm') {
-      if (this.grace > 0) {
-        this.grace = Math.max(0, this.grace - dt);
-        this.annoyance = Math.max(0, this.annoyance - NEIGHBOR.calmPerSecond * dt);
-        return;
-      }
-      const over = noise - NEIGHBOR.quietLimit;
-      const change = over > 0 ? over * NEIGHBOR.annoyPerPoint : -NEIGHBOR.calmPerSecond;
+      // Louder = patience runs out sooner (NOISE_LEVELS); silence slowly earns it back.
+      const level = noiseLevel(noise);
+      const change = level ? 100 / level.visitEvery : -NEIGHBOR.calmPerSecond;
       this.annoyance = Math.min(100, Math.max(0, this.annoyance + change * dt));
       if (this.annoyance >= NEIGHBOR.warnAt && !this.warned) this.bangOnWall();
       if (this.annoyance < NEIGHBOR.warnAt - 20) this.warned = false;
       if (this.annoyance >= 100) this.startComing();
     } else if (this.state === 'coming') {
       this.timer -= dt;
-      this.countdown.setText(`Neighbor at the door in ${Math.ceil(Math.max(0, this.timer))}s`);
+      this.countdown.setText(`He's knocking! Quiet down in ${Math.ceil(Math.max(0, this.timer))}s`);
       this.knockTimer -= dt;
       if (this.knockTimer <= 0) {
         this.knockTimer = 2;
-        this.scene.floatText('KNOCK KNOCK', DOOR.x, DOOR.y - 150, '#fde68a');
+        this.knock();
       }
       if (this.timer <= 0) this.arrive();
     } else if (this.state === 'visiting') {
       this.timer -= dt;
-      this.figure.y = DOOR.y + Math.sin(this.scene.time.now / 300) * 1.5;
+      this.figure.y = SPOT.y + Math.round(Math.sin(this.scene.time.now / 300) * 1.5);
       if (this.timer <= 0) this.leave();
     }
   }
@@ -91,25 +86,47 @@ export class Neighbor {
   startComing() {
     this.state = 'coming';
     this.timer = NEIGHBOR.comingSeconds;
-    this.knockTimer = 0;
+    this.knockTimer = 0.6; // first knock once he's up at the glass
     this.countdown.setVisible(true);
-    this.scene.events.emit('neighbor-coming');
+    this.showWindow(true);
+    // He steps up into view from below the sill.
+    const s = this.scene;
+    s.tweens.killTweensOf(this.figure);
+    this.figure.setFrame(FRAME.knock).setPosition(KNOCK_X, SPOT.y + 70).setAlpha(1).setVisible(true);
+    s.tweens.add({ targets: this.figure, y: SPOT.y, duration: 450, ease: 'Back.out' });
+    s.events.emit('neighbor-coming');
+  }
+
+  // Tap tap tap on the glass.
+  knock() {
+    const s = this.scene;
+    if (!s.tweens.isTweening(this.figure)) {
+      s.tweens.add({ targets: this.figure, x: KNOCK_X - 3, duration: 70, yoyo: true, repeat: 2, onComplete: () => { this.figure.x = KNOCK_X; } });
+    }
+    s.floatText('KNOCK KNOCK', WINDOW.x - 60, 215, '#fde68a');
+  }
+
+  showWindow(open) {
+    this.sky.setVisible(open);
+    this.window.setVisible(open);
   }
 
   arrive() {
     this.state = 'visiting';
     this.countdown.setVisible(false);
-    this.figure.setVisible(true).setAlpha(0);
-    this.scene.tweens.add({ targets: this.figure, alpha: 1, duration: 300 });
+    this.scene.tweens.killTweensOf(this.figure);
+    this.figure.setPosition(SPOT.x, SPOT.y).setAlpha(1).setVisible(true);
     const running = this.scene.runningMachines();
     if (running.length) {
       const fine = fineFor(this.complaints);
       this.complaints += 1;
       const paid = gameState.charge(fine);
+      this.figure.setFrame(FRAME.pointing);
       this.say('Keep it DOWN!');
       this.timer = NEIGHBOR.caughtSeconds;
       this.scene.events.emit('neighbor-complaint', { fine, paid, next: fineFor(this.complaints), running: running.length });
     } else {
+      this.figure.setFrame(FRAME.crossed);
       this.say('...Fine. Thanks.');
       this.timer = NEIGHBOR.checkSeconds;
       this.scene.events.emit('neighbor-satisfied');
@@ -122,25 +139,27 @@ export class Neighbor {
 
   leave() {
     this.state = 'leaving';
+    this.annoyance = 0; // patience starts over (now, so a save during the exit can't bring him straight back)
+    this.warned = false;
     this.bubble.setVisible(false);
+    // He turns around and walks off; the blinds come back down after.
+    this.figure.setFrame(FRAME.away);
+    this.scene.tweens.killTweensOf(this.figure);
     this.scene.tweens.add({
-      targets: this.figure, alpha: 0, duration: 500,
+      targets: this.figure, y: SPOT.y + 60, alpha: 0, duration: 700, ease: 'Sine.in',
       onComplete: () => {
         this.figure.setVisible(false);
+        this.showWindow(false);
         this.state = 'calm';
-        this.annoyance = 0;
-        this.warned = false;
-        this.grace = NEIGHBOR.graceSeconds;
         this.scene.events.emit('neighbor-left');
       },
     });
   }
 
   /** Called when loading a save. A visit that was in progress starts over with a fresh countdown. */
-  restore({ annoyance, complaints, grace, visit }) {
+  restore({ annoyance, complaints, visit }) {
     this.annoyance = annoyance;
     this.complaints = complaints;
-    this.grace = grace;
     this.warned = annoyance >= NEIGHBOR.warnAt;
     if (visit) this.startComing();
   }
@@ -149,7 +168,6 @@ export class Neighbor {
     return {
       annoyance: Math.round(this.annoyance),
       complaints: this.complaints,
-      grace: Math.ceil(this.grace),
       visit: this.state === 'coming' || this.state === 'visiting',
     };
   }

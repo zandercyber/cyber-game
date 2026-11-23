@@ -8,7 +8,6 @@
 import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels } from '../data/agents.js';
 import { QUESTIONS } from '../data/questions.js';
-import { NEIGHBOR } from '../data/neighbor.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 
 const KEY = 'cyber-game-save';
@@ -141,7 +140,6 @@ export function readSave({ plotIds, pileMax }) {
   const neighbor = {
     annoyance: num(n.annoyance, 0, 100),
     complaints: int(n.complaints, 0, 50),
-    grace: num(n.grace, 0, NEIGHBOR.graceSeconds),
     visit: n.visit === true,
   };
 

@@ -51,6 +51,9 @@ export class DormScene extends Phaser.Scene {
     this.load.spritesheet('player', asset('player/zander.png'), { frameWidth: 32, frameHeight: 52 });
     this.load.spritesheet('augustus', asset('augustus/augustus.png'), { frameWidth: 20, frameHeight: 26 });
     this.load.spritesheet('nero', asset('nero/nero.png'), { frameWidth: 28, frameHeight: 30 });
+    this.load.spritesheet('neighbor', asset('neighbor/neighbor.png'), { frameWidth: 38, frameHeight: 52 });
+    this.load.image('window-open', asset('neighbor/window-open.png'));
+    this.load.image('window-sky', asset('neighbor/window-sky.png'));
     for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, asset(item.file));
     for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, asset(file));
   }
@@ -271,7 +274,7 @@ export class DormScene extends Phaser.Scene {
   }
 
   /** Picks up a machine's cash pile, as much as fits in your hands (all: ignore the limit). */
-  // While the neighbor is coming or at the door, walking up to a machine switches it off.
+  // While the neighbor is knocking or at the window, walking up to a machine switches it off.
   // Any other time, walking up to a switched-off machine switches it back on.
   flipSwitch(station) {
     if (!station.plotId) return;
