@@ -8,7 +8,9 @@ Prototype: work hustles at the corner desk and carry the cash to your stash (the
 
 Power is the limit. Every machine draws watts, including the laptop (60 W). Go over your power supply and the lights flicker, then the breaker trips: the room goes dark and machines stop (the laptop keeps going on its battery), and the surge **fries** a machine (two if you trip it again). Stand at the breaker panel to reset it, then stand at each fried machine to repair it. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
 
-**The neighbor:** machines being worked make noise (the server rack most). The louder the room, the sooner your neighbor loses patience: about every 5 minutes at Low noise, 3 at Medium, 2 at High. They bang on the wall halfway there, then show up knocking at your window: you get 15 seconds to walk up to every machine to switch it off. If anything is still running when the countdown ends, you pay a noise fine that doubles with each complaint ($50, $100, $200...). Once they leave, walk up to your machines to switch them back on.
+**The neighbor:** machines being worked make noise (the server rack most). The louder the room, the sooner your neighbor loses patience: about every 5 minutes at Low noise, 3 at Medium, 2 at High, and twice as often during quiet hours at night. They bang on the wall halfway there, then show up knocking at your window: you get 15 seconds to walk up to every machine to switch it off. If anything is still running when the countdown ends, you pay a noise fine that doubles with each complaint ($50, $100, $200...). Once they leave, walk up to your machines to switch them back on.
+
+**Day and night:** a clock next to your cash runs a full day every 10 minutes of play. From 10 PM to 6 AM it's night: the room gets darker and it's quiet hours, so your neighbor (trying to sleep) gets annoyed twice as fast.
 
 **Security checks:** about 1 in 5 jobs you finish yourself pops up a cybersecurity question that matches the machine (help desk, web bugs, or AI security). Right answer: double pay. Wrong or too slow (15 s): the job fails. Every answer shows a one-line explanation, and you won't see a repeat until you've seen the whole set.
 
@@ -44,7 +46,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **L** the neighbor comes over now, **Q** a security question on every job.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **L** the neighbor comes over now, **Q** a security question on every job, **T** skip ahead 2 hours on the clock.
 
 ## Project structure
 

@@ -1,7 +1,8 @@
 // The neighbor next door. Machines being worked make noise (see `noise` in
 // catalog.js); the starter laptop is silent. Any noise slowly uses up their
 // patience, and the louder you are, the sooner they show up knocking at your
-// window: about every 5 minutes at Low noise, 3 at Medium, 2 at High. They bang
+// window: about every 5 minutes at Low noise, 3 at Medium, 2 at High (twice as
+// often at night, during quiet hours). They bang
 // on the wall halfway there as a warning. You get a countdown to switch every
 // machine off; if anything is still running when it ends, you pay a noise fine
 // that grows with each complaint.
@@ -17,6 +18,7 @@ export const NOISE_LEVELS = [
 
 export const NEIGHBOR = {
   calmPerSecond: 0.25, // patience regained per second while everything is silent (out of 100)
+  nightMultiplier: 2, // quiet hours (10 PM to 6 AM, see clock.js): noise wears out patience this many times faster
   warnAt: 50, // they bang on the wall at this much annoyance (halfway to a visit)
   comingSeconds: 15, // time to switch everything off while they knock on the window
   checkSeconds: 8, // they look in the window this long when it's quiet

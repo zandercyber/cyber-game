@@ -9,6 +9,7 @@ import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels } from '../data/agents.js';
 import { QUESTIONS } from '../data/questions.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
+import { CLOCK, MINUTES_PER_DAY } from '../data/clock.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -143,6 +144,12 @@ export function readSave({ plotIds, pileMax }) {
     visit: n.visit === true,
   };
 
+  // Time of day (older saves have none: the clock starts fresh at 8 AM on day 1).
+  const c = obj(raw.clock);
+  const clock = Object.hasOwn(raw, 'clock')
+    ? { day: int(c.day, 1, 100000, 1), minutes: num(c.minutes, 0, MINUTES_PER_DAY - 0.1, CLOCK.startHour * 60) }
+    : null;
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
@@ -162,6 +169,7 @@ export function readSave({ plotIds, pileMax }) {
     questionsSeen,
     playerLevels,
     neighbor,
+    clock,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {

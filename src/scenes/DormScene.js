@@ -17,6 +17,8 @@ import {
 import { readSave, writeSave } from '../state/save.js';
 import { Agent } from '../systems/Agent.js';
 import { Neighbor } from '../systems/Neighbor.js';
+import { Clock } from '../systems/Clock.js';
+import { CLOCK } from '../data/clock.js';
 import {
   AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, agentName, hirePrice, isAgentType, noAgentLevels,
 } from '../data/agents.js';
@@ -56,6 +58,7 @@ export class DormScene extends Phaser.Scene {
     this.load.spritesheet('neighbor', asset('neighbor/neighbor.png'), { frameWidth: 38, frameHeight: 52 });
     this.load.image('window-open', asset('neighbor/window-open.png'));
     this.load.image('window-sky', asset('neighbor/window-sky.png'));
+    this.load.image('window-sky-night', asset('neighbor/window-sky-night.png'));
     for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, asset(item.file));
     for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, asset(file));
   }
@@ -153,6 +156,13 @@ export class DormScene extends Phaser.Scene {
     this.neighbor = new Neighbor(this);
     this.noise = 0;
 
+    // Time of day: the room darkens at night (quiet hours).
+    this.clock = new Clock(this);
+    this.nightShade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x0a1030)
+      .setOrigin(0)
+      .setDepth(10990) // over the room and everyone in it, under the power-out darkness and all labels
+      .setAlpha(0);
+
     // Pick up where you left off, then keep saving automatically.
     this.restoreProgress();
     this.setupAutosave();
@@ -180,6 +190,8 @@ export class DormScene extends Phaser.Scene {
     this.tryInstall();
     this.updateBreaker(dt);
     this.updateLights();
+    this.clock.update(dt);
+    this.updateNight();
     this.updateAgents(dt);
     this.updateStations(dt);
     this.updateShopOpen();
@@ -747,6 +759,12 @@ export class DormScene extends Phaser.Scene {
     if (this.darkness.alpha !== alpha) this.darkness.setAlpha(alpha);
   }
 
+  // Night falls over an hour of game time, and lifts the same way at dawn.
+  updateNight() {
+    const alpha = Math.round(this.clock.darkness * CLOCK.nightTint * 100) / 100;
+    if (this.nightShade.alpha !== alpha) this.nightShade.setAlpha(alpha);
+  }
+
   updateBreaker(dt) {
     // Using more watts than your power supply allows trips the breaker after a moment.
     const { used, capacity } = gameState.power;
@@ -990,6 +1008,7 @@ export class DormScene extends Phaser.Scene {
       questionsSeen: this.questionsSeen,
       playerLevels: this.playerLevels,
       neighbor: this.neighbor.saveState,
+      clock: this.clock.saveState,
     });
   }
 
@@ -1031,6 +1050,8 @@ export class DormScene extends Phaser.Scene {
     if (save.tripped) this.trip({ silent: true });
     this.questionsSeen = save.questionsSeen;
     this.playerLevels = { ...save.playerLevels };
+    if (save.clock) this.clock.restore(save.clock); // before the neighbor, so a visit at night shows the night sky
+    this.updateNight();
     this.neighbor.restore(save.neighbor);
     this.applyPlayerStats();
     this.agentLevels = save.agentLevels;
@@ -1218,7 +1239,8 @@ export class DormScene extends Phaser.Scene {
   // ---------- Debug (?debug or #debug) ----------
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
-  // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, L the neighbor comes over now, Q questions on every job.
+  // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, L the neighbor comes over now, Q questions on every job,
+  // T skip ahead 2 hours on the clock.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1242,6 +1264,7 @@ export class DormScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-G', () => { // an Augustus, free and right now
       if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'augustus', remaining: 0.1 });
     });
+    this.input.keyboard.on('keydown-T', () => this.clock.advance(120)); // 2 game hours
     this.input.keyboard.on('keydown-L', () => { // the neighbor comes over now
       if (this.neighbor.state === 'calm') this.neighbor.startComing();
     });
