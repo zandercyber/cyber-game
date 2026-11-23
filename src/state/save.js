@@ -5,7 +5,7 @@
 // corrupted. Loading only reads the fields we expect, checks every value,
 // and falls back to defaults for anything that doesn't make sense.
 
-import { ITEMS, POWER_TIERS, orderable } from '../data/catalog.js';
+import { ITEMS, POWER_TIERS, FOAM_MAX_LEVEL, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, noAgentLevels } from '../data/agents.js';
 import { QUESTIONS } from '../data/questions.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
@@ -144,6 +144,9 @@ export function readSave({ plotIds, pileMax }) {
     visit: n.visit === true,
   };
 
+  // Foam panels on the wall (0 = none).
+  const foamLevel = int(raw.foamLevel, 0, FOAM_MAX_LEVEL, 0);
+
   // Time of day (older saves have none: the clock starts fresh at 8 AM on day 1).
   const c = obj(raw.clock);
   const clock = Object.hasOwn(raw, 'clock')
@@ -170,6 +173,7 @@ export function readSave({ plotIds, pileMax }) {
     playerLevels,
     neighbor,
     clock,
+    foamLevel,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {

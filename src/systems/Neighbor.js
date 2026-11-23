@@ -9,6 +9,7 @@
 // window-sky.png sits behind it, and he stands between the two, so the sill hides his legs.
 
 import { NEIGHBOR, fineFor, noiseLevel } from '../data/neighbor.js';
+import { FOAM_QUIET_PER_LEVEL } from '../data/catalog.js';
 import { gameState } from '../state/GameState.js';
 
 const FONT = 'system-ui, sans-serif';
@@ -44,9 +45,11 @@ export class Neighbor {
     }).setOrigin(0.5).setDepth(12600).setVisible(false);
   }
 
-  /** How much faster than usual noise wears out his patience right now (night = quiet hours). */
+  /** How fast noise wears out his patience compared to usual: x2 at night (quiet hours), -10% per foam level. */
   get sensitivity() {
-    return this.scene.clock?.night ? NEIGHBOR.nightMultiplier : 1;
+    const night = this.scene.clock?.night ? NEIGHBOR.nightMultiplier : 1;
+    const foam = 1 - FOAM_QUIET_PER_LEVEL * (this.scene.foamLevel ?? 0);
+    return night * foam;
   }
 
   /** True while you're supposed to be quiet (he's knocking or at the window). */
@@ -57,8 +60,8 @@ export class Neighbor {
   /** noise: what your machines are making right now. */
   update(dt, noise) {
     if (this.state === 'calm') {
-      // Louder = patience runs out sooner (NOISE_LEVELS), twice as fast during quiet hours;
-      // silence slowly earns it back.
+      // Louder = patience runs out sooner (NOISE_LEVELS), twice as fast during quiet hours,
+      // a bit slower with foam panels up; silence slowly earns it back.
       const level = noiseLevel(noise);
       const change = level ? (100 / level.visitEvery) * this.sensitivity : -NEIGHBOR.calmPerSecond;
       this.annoyance = Math.min(100, Math.max(0, this.annoyance + change * dt));

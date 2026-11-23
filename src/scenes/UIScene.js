@@ -1,6 +1,6 @@
 // Heads-up display drawn on top of the room: cash, power meter, shop, buttons.
 import * as Phaser from 'phaser';
-import { ITEMS, POWER_ITEMS, POWER_TIERS, SHOVEL_REFUND } from '../data/catalog.js';
+import { ITEMS, POWER_ITEMS, POWER_TIERS, FOAM_ITEMS, FOAM_QUIET_PER_LEVEL, SHOVEL_REFUND } from '../data/catalog.js';
 import { AGENT_TYPES } from '../data/agents.js';
 import { NEIGHBOR, noiseLevel } from '../data/neighbor.js';
 import { PLAYER_UPGRADES } from '../data/playerUpgrades.js';
@@ -78,6 +78,7 @@ export class UIScene extends Phaser.Scene {
       onBuy: (itemId) => this.dorm.buy(itemId),
       getOrders: () => this.dorm.orders,
       getPower: () => ({ next: this.dorm.nextPower(), pending: this.dorm.powerPending() }),
+      getFoam: () => ({ next: this.dorm.nextFoam(), pending: this.dorm.foamPending(), level: this.dorm.foamLevel }),
       getAgents: () => this.dorm.agentsInfo(),
       onHire: (type) => this.dorm.hireAgent(type),
       onAgentUpgrade: (type, kind) => this.dorm.buyAgentUpgrade(type, kind),
@@ -117,11 +118,13 @@ export class UIScene extends Phaser.Scene {
       }
     };
     const onPower = (power) => this.showBanner('Power upgraded!', `${power.name}: up to ${power.capacity} W`);
+    const onFoam = (level) => this.showBanner('Foam panels up!', `Level ${level}: noise bothers your neighbor ${Math.round(level * FOAM_QUIET_PER_LEVEL * 100)}% less, so they come over less often.`);
     const onArrive = (agent) => this.showBanner(`${agent.name} has arrived!`, 'Works your machines and carries cash to the hamper. Upgrade agents in the shop.', PURPLE);
     const onUpgrade = (type, kind, level) => this.showBanner('Agent upgraded!', `${AGENT_TYPES[type].upgrades[kind].name} is now level ${level}.`, PURPLE);
     const onPlayerUpgrade = (kind, level) => this.showBanner('Upgraded!', `${PLAYER_UPGRADES[kind].name}: ${PLAYER_UPGRADES[kind].describe(level).toLowerCase()}.`);
     this.dorm.events.on('breaker-tripped', onTrip);
     this.dorm.events.on('power-installed', onPower);
+    this.dorm.events.on('foam-installed', onFoam);
     const onRogue = (agent) => this.showBanner(`${agent.name} went rogue!`, 'He\'s frying your machines. Stay right next to him for 3 seconds to contain him.', RED);
     const onContained = (agent) => this.showBanner(`${agent.name} contained!`, 'Quarantined for 60 seconds, then he goes back to work.', 0x5ff0ff);
     const AMBER = 0xfbbf24;
@@ -153,6 +156,7 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('shop', onShop);
       this.dorm.events.off('breaker-tripped', onTrip);
       this.dorm.events.off('power-installed', onPower);
+      this.dorm.events.off('foam-installed', onFoam);
       this.dorm.events.off('agent-arrived', onArrive);
       this.dorm.events.off('agent-rogue', onRogue);
       this.dorm.events.off('agent-contained', onContained);
@@ -175,11 +179,12 @@ export class UIScene extends Phaser.Scene {
     else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
     else if (carryBox) {
       if (Object.hasOwn(POWER_ITEMS, carryBox.itemId)) text = 'Take the box to the breaker panel';
+      else if (Object.hasOwn(FOAM_ITEMS, carryBox.itemId)) text = 'Take the foam panels to the bed';
       else text = this.dorm.hasEmptyPlot ? 'Carry the box to an empty plot' : 'No empty plot: bring the box back to the door';
     }
     else if (boxes.length) {
       const waiting = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
-      const stuck = !this.dorm.hasEmptyPlot && boxes.every((b) => !Object.hasOwn(POWER_ITEMS, b.itemId));
+      const stuck = !this.dorm.hasEmptyPlot && boxes.every((b) => Object.hasOwn(ITEMS, b.itemId));
       text = stuck ? `${waiting}: dig up a machine to make room` : waiting;
     }
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;

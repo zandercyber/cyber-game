@@ -51,6 +51,10 @@ export const DORM = {
   // Breaker panel on the right wall: reset it when too much power trips the breaker.
   breaker: { x: 1255, y: 500, reach: 85, labelX: 1262, labelY: 268, panelX: 1322, panelY: 342 },
 
+  // Foam panels go on the back wall above the bed (a 3x3 grid of 50x51 tiles at most);
+  // carry the box to the side of the bed by the headboard to put them up.
+  foamWall: { x: 490, y: 448, reach: 70, labelX: 387, labelY: 112, tilesX: 312, tilesY: 35, tileW: 50, tileH: 51 },
+
   // Deliveries show up here, just inside the door.
   deliverySpot: { x: 812, y: 395 },
 

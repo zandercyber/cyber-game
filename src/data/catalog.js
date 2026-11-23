@@ -67,11 +67,24 @@ export const POWER_TIERS = [
 // Power upgrades by id (everything after the starting wall outlet), with their tier number.
 export const POWER_ITEMS = Object.fromEntries(POWER_TIERS.slice(1).map((t, i) => [t.id, { ...t, tier: i + 1 }]));
 
-/** Anything you can order: a machine (ITEMS) or a power upgrade (POWER_ITEMS). null if unknown. */
+// Foam wall panels on the wall above the bed: 3 levels, bought one at a time. Each level
+// makes noise wear out the neighbor's patience FOAM_QUIET_PER_LEVEL (10%) slower, so they
+// come over a little less often. The box goes to the bed (DORM.foamWall).
+export const FOAM_QUIET_PER_LEVEL = 0.1;
+export const FOAM_LEVELS = [
+  { id: 'foam-1', name: 'Foam panels', level: 1, price: 150, deliverySeconds: 20 },
+  { id: 'foam-2', name: 'More foam panels', level: 2, price: 300, deliverySeconds: 30 },
+  { id: 'foam-3', name: 'Full foam wall', level: 3, price: 600, deliverySeconds: 40 },
+];
+export const FOAM_MAX_LEVEL = FOAM_LEVELS.length;
+export const FOAM_ITEMS = Object.fromEntries(FOAM_LEVELS.map((f) => [f.id, f]));
+
+/** Anything you can order: a machine (ITEMS), a power upgrade (POWER_ITEMS) or foam (FOAM_ITEMS). null if unknown. */
 export function orderable(id) {
   if (typeof id !== 'string') return null;
   if (Object.hasOwn(ITEMS, id)) return ITEMS[id];
   if (Object.hasOwn(POWER_ITEMS, id)) return POWER_ITEMS[id];
+  if (Object.hasOwn(FOAM_ITEMS, id)) return FOAM_ITEMS[id];
   return null;
 }
 
@@ -86,6 +99,8 @@ export const SMALL_IMAGES = {
   'item-ups': 'items/ups.png',
   'item-dedicated-circuit': 'items/dedicated-circuit.png',
   'item-shovel': 'items/shovel.png',
+  'foam-charcoal': 'foam/foam-charcoal.png',
+  'foam-navy': 'foam/foam-navy.png',
 };
 
 // Share of the price you get back when you shovel an item out of a plot.

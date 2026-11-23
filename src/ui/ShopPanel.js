@@ -1,10 +1,10 @@
 // The shop screen: opens when you stand at the corner laptop (after it unlocks).
 // Three tabs:
-//   Gear: machines plus the next power upgrade; orders arrive later as a box at the door.
+//   Gear: machines plus the next power upgrade and foam panels; orders arrive later as a box at the door.
 //   Agents: hire AI agents (up to 3, any mix) and upgrade each type. Pick a type with the chips.
 //   You: your own upgrades (carry limit, speed).
 
-import { ITEMS, orderable } from '../data/catalog.js';
+import { ITEMS, FOAM_MAX_LEVEL, FOAM_QUIET_PER_LEVEL, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX } from '../data/agents.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
@@ -34,10 +34,10 @@ function agentThumb(type, kind) {
 export class ShopPanel {
   constructor(scene, callbacks) {
     this.scene = scene;
-    // onBuy, getOrders, getPower, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade
+    // onBuy, getOrders, getPower, getFoam, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade
     Object.assign(this, callbacks);
     const ids = Object.keys(ITEMS);
-    const rowCount = ids.length + 1; // machines + one power row
+    const rowCount = ids.length + 2; // machines + a power row + a foam row
     this.height = HEADER_H + rowCount * ROW_H + 64;
 
     this.root = scene.add.container(X, Y).setDepth(30000).setVisible(false);
@@ -59,7 +59,8 @@ export class ShopPanel {
     // Gear tab.
     this.rows = ids.map((id, i) => this.addRow(HEADER_H + i * ROW_H, { tab: 'gear', id, thumb: [`station-${id}`] }));
     this.powerRow = this.addRow(HEADER_H + ids.length * ROW_H, { tab: 'gear', id: null, thumb: ['item-power-strip'] });
-    this.rows.push(this.powerRow);
+    this.foamRow = this.addRow(HEADER_H + (ids.length + 1) * ROW_H, { tab: 'gear', id: null, thumb: ['foam-charcoal', undefined, 1.1] });
+    this.rows.push(this.powerRow, this.foamRow);
     this.ordersText = scene.add.text(20, HEADER_H + rowCount * ROW_H + 14, '', {
       fontFamily: FONT, fontSize: '15px', color: '#fbbf24', lineSpacing: 4,
     });
@@ -225,18 +226,20 @@ export class ShopPanel {
   refreshGear() {
     const { next, pending } = this.getPower();
     this.refreshPowerRow(next, pending);
+    const foam = this.getFoam();
+    this.refreshFoamRow(foam);
     const power = gameState.power;
 
     for (const row of this.rows) {
       if (row.tab !== 'gear') continue;
       const item = row.id ? orderable(row.id) : null;
-      const waiting = row === this.powerRow && pending;
+      const waiting = (row === this.powerRow && pending) || (row === this.foamRow && foam.pending);
       let text = item ? `$${item.price}` : 'Maxed';
       if (waiting) text = 'On the way';
       this.setButton(row, text, Boolean(item) && !waiting && gameState.cash >= item.price);
 
       // Machines: warn if it would push you over your power supply's limit.
-      if (row !== this.powerRow) {
+      if (row !== this.powerRow && row !== this.foamRow) {
         const kind = { bounty: 'Bug bounties', agents: 'AI agent jobs' }[item.earns?.jobs] ?? 'Hustles';
         const over = power.used + item.watts > power.capacity;
         row.info.setText(`${kind} · ${item.watts} W${over ? ' (over limit)' : ''} · ${item.deliverySeconds}s`);
@@ -264,6 +267,21 @@ export class ShopPanel {
     row.name.setText(next ? `Power: ${next.name}` : 'Power: maxed out');
     let info = 'You have the best power supply.';
     if (next) info = pending ? 'Install it at the breaker panel' : `Up to ${next.capacity} W · goes on the breaker · ${next.deliverySeconds}s`;
+    row.info.setText(info).setColor('#94a3b8');
+  }
+
+  // Offers the next level of foam panels (3 levels).
+  refreshFoamRow({ next, pending, level }) {
+    const row = this.foamRow;
+    row.id = next?.id ?? null;
+    const pct = (n) => Math.round(n * FOAM_QUIET_PER_LEVEL * 100);
+    row.name.setText(next ? `${next.name} (${next.level}/${FOAM_MAX_LEVEL})` : `Foam panels: maxed out`);
+    let info = `Neighbor bothered ${pct(level)}% less. The wall is full.`;
+    if (next) {
+      info = pending
+        ? 'Put them up: carry the box to the bed'
+        : `Neighbor bothered ${pct(next.level)}% less${level ? ` (now ${pct(level)}%)` : ''} · goes on the wall above the bed · ${next.deliverySeconds}s`;
+    }
     row.info.setText(info).setColor('#94a3b8');
   }
 
