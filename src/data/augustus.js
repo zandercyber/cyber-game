@@ -7,7 +7,7 @@ export const AUGUSTUS = {
   hirePrice: 300,
   arriveSeconds: 6, // after hiring, he floats in through the door this much later
   moveSpeed: 150, // world pixels per second (you move at 240)
-  workRate: 0.6, // how fast he finishes jobs compared with you
+  workRate: 0.5, // how fast he finishes jobs compared with you (you: 1x, up to 2x with Work speed)
   awakeSeconds: 90, // energy: time awake before he needs a nap
   napSeconds: 60, // the nap itself ("resetting credits")
   drowsySeconds: 2, // eyes closing before he falls asleep
@@ -39,7 +39,7 @@ export const AUGUSTUS_UPGRADES = {
 export function augustusStats(levels) {
   return {
     moveSpeed: AUGUSTUS.moveSpeed * (1 + 0.15 * levels.speed),
-    workRate: AUGUSTUS.workRate * (1 + 0.15 * levels.speed),
+    workRate: AUGUSTUS.workRate * (1 + 0.12 * levels.speed), // up to 0.8x
     payBonus: 1 + 0.15 * levels.profit,
     awakeSeconds: AUGUSTUS.awakeSeconds + 30 * levels.energy,
   };

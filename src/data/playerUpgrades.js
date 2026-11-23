@@ -18,6 +18,11 @@ export const PLAYER_UPGRADES = {
     prices: [100, 200, 400, 800, 1600],
     describe: (lvl) => (lvl === 0 ? 'Normal walking speed' : `Walk ${10 * lvl}% faster`),
   },
+  work: {
+    name: 'Work speed',
+    prices: [150, 300, 600, 1200, 2400],
+    describe: (lvl) => (lvl === 0 ? 'Finish jobs at normal speed' : `Finish jobs ${20 * lvl}% faster`),
+  },
 };
 export const PLAYER_UPGRADE_IDS = Object.keys(PLAYER_UPGRADES);
 
@@ -26,7 +31,8 @@ export function playerStats(levels) {
   return {
     carryLimit: CARRY_LIMITS[levels.carry],
     speedMultiplier: 1 + 0.1 * levels.speed,
+    workRate: 1 + 0.2 * levels.work, // job speed; agents work slower than this (Augustus 0.5x, Nero 0.8x)
   };
 }
 
-export const noPlayerLevels = () => ({ carry: 0, speed: 0 });
+export const noPlayerLevels = () => ({ carry: 0, speed: 0, work: 0 });

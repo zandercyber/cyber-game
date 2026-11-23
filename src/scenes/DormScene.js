@@ -134,7 +134,8 @@ export class DormScene extends Phaser.Scene {
     // What you're holding (cash or one box), orders on the way, boxes at the door.
     this.carried = 0;
     this.carryStack = [];
-    this.playerLevels = noPlayerLevels(); // carry limit and speed, bought in the shop
+    this.playerLevels = noPlayerLevels(); // carry limit, walking speed and work speed, bought in the shop
+    this.workRate = 1; // your job speed (see applyPlayerStats)
     // How much cash you're holding, shown over your head.
     this.carryLabel = this.add.text(0, 0, '', {
       fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#b8ffcf', stroke: '#0b0e14', strokeThickness: 4,
@@ -285,7 +286,7 @@ export class DormScene extends Phaser.Scene {
         canWork: (atThis && still && !this.handsFull) || Boolean(helper),
         near: st.near,
         handsFull: atThis && this.handsFull,
-        rate: helper?.workRate ?? 1,
+        rate: helper ? helper.workRate : this.workRate, // you: 1x, faster with the Work speed upgrade
         bonus: helper?.payBonus ?? 1,
         helper: Boolean(helper),
       });
@@ -337,7 +338,7 @@ export class DormScene extends Phaser.Scene {
     return playerStats(this.playerLevels).carryLimit;
   }
 
-  /** Called by the shop: 'carry' or 'speed'. Returns true if it went through. */
+  /** Called by the shop: 'carry', 'speed' or 'work'. Returns true if it went through. */
   buyPlayerUpgrade(kind) {
     const upgrade = Object.hasOwn(PLAYER_UPGRADES, kind) ? PLAYER_UPGRADES[kind] : null;
     if (!upgrade) return false;
@@ -350,7 +351,9 @@ export class DormScene extends Phaser.Scene {
   }
 
   applyPlayerStats() {
-    this.player.speedMultiplier = playerStats(this.playerLevels).speedMultiplier;
+    const stats = playerStats(this.playerLevels);
+    this.player.speedMultiplier = stats.speedMultiplier;
+    this.workRate = stats.workRate;
   }
 
   // If you're broke and own nothing that earns, the laptop does hustles again

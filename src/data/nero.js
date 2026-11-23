@@ -1,5 +1,5 @@
 // Nero, the high-risk, high-reward AI agent. Stronger than Augustus (works at
-// your full speed, +50% pay, never naps), but about every 5 minutes he goes
+// 80% of your speed, +50% pay, never naps), but about every 5 minutes he goes
 // rogue: he races between machines frying them until you catch him by staying
 // right next to him for 3 seconds. Then he's quarantined for a minute.
 // All numbers are first guesses to tune.
@@ -8,7 +8,7 @@ export const NERO = {
   hirePrice: 2500, // doubles for each extra Nero
   arriveSeconds: 8,
   moveSpeed: 190, // world pixels per second (you move at 240)
-  workRate: 1, // same job speed as you
+  workRate: 0.8, // job speed compared with you (you: 1x, up to 2x with Work speed)
   payBonus: 1.5, // +50% pay on jobs he does
   scale: 3, // sprite sheet is drawn at 3x (28x30 frames)
   rogue: {
@@ -44,7 +44,7 @@ export const NERO_UPGRADES = {
 export function neroStats(levels) {
   return {
     moveSpeed: NERO.moveSpeed * (1 + 0.15 * levels.speed),
-    workRate: NERO.workRate * (1 + 0.15 * levels.speed),
+    workRate: NERO.workRate * (1 + 0.12 * levels.speed), // up to about 1.3x
     payBonus: NERO.payBonus + 0.15 * levels.profit,
     awakeSeconds: 0, // never naps
     rogueEvery: NERO.rogue.every.map((s) => s * (1 + 0.25 * levels.stability)),

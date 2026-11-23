@@ -2,7 +2,7 @@
 // Three tabs:
 //   Gear: machines plus the next power upgrade and foam panels; orders arrive later as a box at the door.
 //   Agents: hire AI agents (up to MAX_AGENTS, any mix) and upgrade each type. Pick a type with the chips.
-//   You: your own upgrades (carry limit, speed).
+//   You: your own upgrades (carry limit, walking speed, work speed).
 
 import { ITEMS, FOAM_MAX_LEVEL, FOAM_QUIET_PER_LEVEL, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS } from '../data/agents.js';
@@ -21,7 +21,7 @@ const GREEN = 0x16a34a;
 const GREY = 0x334155;
 const ACTIVE = 0x0e7490;
 
-const PLAYER_THUMBS = { carry: ['item-cash', undefined, 1.3], speed: ['player', 0, 1.1] };
+const PLAYER_THUMBS = { carry: ['item-cash', undefined, 1.3], speed: ['player', 0, 1.1], work: ['player', 36, 1.1] }; // 36 = working (back view)
 const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 
 // Thumbnail per agent upgrade: the agent's own frames (speed = side view, energy = asleep).
