@@ -26,7 +26,7 @@ export const AGENT_TYPES = {
   },
   nero: {
     name: 'Nero',
-    blurb: 'Full speed, +50% pay, never naps. Goes rogue about every 5 min: catch him!',
+    blurb: '+50% pay, never naps. Goes rogue about every 5 min: catch him!',
     hirePrice: NERO.hirePrice, // doubles for each extra Nero
     arriveSeconds: NERO.arriveSeconds,
     texture: 'nero',

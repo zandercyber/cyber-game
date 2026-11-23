@@ -18,9 +18,9 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **AI agents** (the shop's **Agents** tab): run up to 2, any mix (the dorm is small). **Augustus** rides a cloud, works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. The first costs $300 and each extra Augustus costs double the last. Upgrades (speed, profit, energy) apply to every agent of that type.
 
-**Nero** ($2,500) is the high-risk, high-reward agent: he works at your full speed for +50% pay and never naps, but about every 5 minutes he **goes rogue**, racing between machines and frying them. Stay right next to him for 3 seconds to contain him; he's quarantined for a minute, then goes back to work. His **stability** upgrade makes it happen less often.
+**Nero** ($2,500) is the high-risk, high-reward agent: he works at 80% of your speed for +50% pay and never naps, but about every 5 minutes he **goes rogue**, racing between machines and frying them. Stay right next to him for 3 seconds to contain him; he's quarantined for a minute, then goes back to work. His **stability** upgrade makes it happen less often.
 
-**Your upgrades** (the shop's **You** tab): **carry limit** (you start holding up to $100; bigger piles take more than one trip) and **speed** (+10% per level). 5 levels each.
+**Your upgrades** (the shop's **You** tab): **carry limit** (you start holding up to $100; bigger piles take more than one trip), **speed** (+10% walking per level) and **work speed** (finish jobs +20% faster per level, up to 2x; agents work slower than you: Augustus 0.5x, Nero 0.8x, a bit more with their upgrades). 5 levels each.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
 
