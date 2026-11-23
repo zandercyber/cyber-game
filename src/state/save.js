@@ -10,6 +10,7 @@ import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, isAgentType, 
 import { QUESTIONS } from '../data/questions.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { CLOCK, MINUTES_PER_DAY } from '../data/clock.js';
+import { UPDATES } from '../data/maintenance.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -68,6 +69,11 @@ export function readSave({ plotIds, pileMax }) {
     const v = obj(value);
     return {
       pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true, broken: v.broken === true, off: v.off === true,
+      // Maintenance (src/data/maintenance.js): crashed servers, PC updates. Missing = fresh.
+      crashed: v.crashed === true,
+      updateIn: Number.isFinite(v.updateIn) ? num(v.updateIn, 0, UPDATES.every[1]) : null,
+      updateDue: v.updateDue === true,
+      updateAge: num(v.updateAge, 0, UPDATES.graceSeconds * 100),
     };
   };
 

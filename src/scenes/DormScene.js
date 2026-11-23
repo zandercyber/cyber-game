@@ -18,6 +18,7 @@ import { readSave, writeSave } from '../state/save.js';
 import { Agent } from '../systems/Agent.js';
 import { Neighbor } from '../systems/Neighbor.js';
 import { Clock } from '../systems/Clock.js';
+import { SERVER_JOBS, PC_JOBS } from '../data/maintenance.js';
 import { CLOCK } from '../data/clock.js';
 import {
   AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, agentName, hirePrice, isAgentType, noAgentLevels,
@@ -245,6 +246,8 @@ export class DormScene extends Phaser.Scene {
       payMultiplier: earns.payMultiplier,
       sprite: plot.sprite,
       group: groupForJobs(earns.jobs),
+      crashes: SERVER_JOBS.includes(earns.jobs), // servers crash
+      updates: PC_JOBS.includes(earns.jobs), // PCs need updates
     });
     // You stand in front of the machine (below it on screen) to work or collect.
     const spot = { x: plot.x, y: plot.y + 72, reach: earns.mode === 'idle' ? 110 : 80 };
@@ -872,7 +875,17 @@ export class DormScene extends Phaser.Scene {
 
   /** Installed machines that are fried and waiting for a repair. */
   get friedCount() {
-    return this.stations.filter((st) => st.hustle.broken).length;
+    return this.stations.filter((st) => st.hustle.broken && !st.hustle.crashed).length;
+  }
+
+  /** Servers that crashed and are waiting for a reboot. */
+  get crashedStations() {
+    return this.stations.filter((st) => st.hustle.crashed);
+  }
+
+  /** PCs with an update waiting to be installed. */
+  get pendingUpdates() {
+    return this.stations.filter((st) => st.hustle.updateDue && !st.hustle.broken);
   }
 
   resetBreaker() {
@@ -1085,14 +1098,25 @@ export class DormScene extends Phaser.Scene {
 
   stationState(station) {
     const h = station.hustle;
-    return { pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken, off: h.switchedOff };
+    return {
+      pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken, crashed: h.crashed, off: h.switchedOff,
+      ...(h.updates ? { updateIn: Math.round(h.updateIn), updateDue: h.updateDue, updateAge: Math.round(h.updateAge) } : {}),
+    };
   }
 
   restoreStation(station, state) {
     if (!station || !state) return;
-    const { broken, off, ...rest } = state;
-    Object.assign(station.hustle, rest);
-    if (broken && station.plotId) station.hustle.setBroken(true, { quiet: true });
+    const { broken, crashed, off, updateIn, updateDue, updateAge, ...rest } = state;
+    const h = station.hustle;
+    Object.assign(h, rest);
+    if (broken && station.plotId) h.setBroken(true, { quiet: true, kind: crashed && h.crashes ? 'crashed' : 'fried' });
+    if (h.updates && updateIn !== null) {
+      h.updateIn = updateIn;
+      if (updateDue) {
+        h.setUpdateDue(true, { quiet: true });
+        h.updateAge = updateAge;
+      }
+    }
     if (off && station.plotId) station.hustle.setSwitchedOff(true, { quiet: true });
     station.hustle.renderPile();
   }
@@ -1318,7 +1342,8 @@ export class DormScene extends Phaser.Scene {
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
   // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, L the neighbor comes over now, Q questions on every job,
-  // T skip ahead 2 hours on the clock, F put up the next level of foam panels now.
+  // T skip ahead 2 hours on the clock, F put up the next level of foam panels now,
+  // C crash a server now, V an update on every PC now.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1343,6 +1368,13 @@ export class DormScene extends Phaser.Scene {
       if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'augustus', remaining: 0.1 });
     });
     this.input.keyboard.on('keydown-T', () => this.clock.advance(120)); // 2 game hours
+    this.input.keyboard.on('keydown-C', () => { // crash a server now
+      const st = this.stations.find((s) => s.hustle.crashes && !s.hustle.broken);
+      if (st) st.hustle.setBroken(true, { kind: 'crashed' });
+    });
+    this.input.keyboard.on('keydown-V', () => { // an update on every PC now
+      for (const s of this.stations) if (s.hustle.updates && !s.hustle.updateDue && !s.hustle.broken) s.hustle.setUpdateDue(true);
+    });
     this.input.keyboard.on('keydown-F', () => { // next foam level now
       if (this.foamLevel >= FOAM_MAX_LEVEL) return;
       this.foamLevel += 1;
