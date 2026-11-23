@@ -21,7 +21,7 @@ export const AUGUSTUS_UPGRADES = {
   speed: {
     name: 'Augustus speed',
     prices: [100, 200, 400, 800, 1600],
-    describe: (lvl) => `Floats and works ${15 * lvl}% faster`,
+    describe: (lvl) => `Floats ${15 * lvl}% faster, works ${12 * lvl}% faster`,
   },
   profit: {
     name: 'Augustus profit',

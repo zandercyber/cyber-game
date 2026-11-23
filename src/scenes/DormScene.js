@@ -12,7 +12,7 @@ import { gameState } from '../state/GameState.js';
 import { asset } from '../systems/assets.js';
 import { HustleStation } from '../systems/HustleStation.js';
 import {
-  HELPDESK_JOBS, BOUNTY_JOBS, AGENT_JOBS, HEAT, STARTER_DESK_PILE_MAX, SHOP_UNLOCK_CASH,
+  HELPDESK_JOBS, BOUNTY_JOBS, AGENT_JOBS, TRAINING_JOBS, HEAT, STARTER_DESK_PILE_MAX, SHOP_UNLOCK_CASH,
 } from '../data/hustles.js';
 import { readSave, writeSave } from '../state/save.js';
 import { Agent } from '../systems/Agent.js';
@@ -27,7 +27,7 @@ import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, playerStats, noPlayerLevels } from '
 
 const ACCENT = 0x5ff0ff;
 const FONT = 'system-ui, sans-serif';
-const JOB_LISTS = { helpdesk: HELPDESK_JOBS, bounty: BOUNTY_JOBS, agents: AGENT_JOBS };
+const JOB_LISTS = { helpdesk: HELPDESK_JOBS, bounty: BOUNTY_JOBS, agents: AGENT_JOBS, training: TRAINING_JOBS };
 // Where delivery boxes land, relative to the delivery spot by the door.
 const BOX_OFFSETS = [[0, 12], [-58, 32], [58, 32], [-30, 62], [30, 62], [0, 92]];
 const BOX_REACH = 52;

@@ -4,11 +4,11 @@ A tycoon-style cybersecurity simulator for the browser. Start in your dorm room,
 
 ## Status
 
-Prototype: work hustles at the corner desk and carry the cash to your stash (the laundry basket). At $50 the laptop becomes the shop: order gear, carry the delivery box to an empty plot, and your new machines earn money (hustles, bug bounties, or an AI agent business on the server rack).
+Prototype: work hustles at the corner desk and carry the cash to your stash (the laundry basket). At $50 the laptop becomes the shop: order gear, carry the delivery box to an empty plot, and your new machines earn money (hustles, bug bounties, an AI agent business on the server rack, or AI model training on the **GPU rig**: the best pay in the dorm, but it's loud, draws 1,500 W and runs hot).
 
 Power is the limit. Every machine draws watts, including the laptop (60 W). Go over your power supply and the lights flicker, then the breaker trips: the room goes dark and machines stop (the laptop keeps going on its battery), and the surge **fries** a machine (two if you trip it again). Stand at the breaker panel to reset it, then stand at each fried machine to repair it. Buy bigger power supplies at the shop and carry the box to the panel. Stand at a machine and use the **shovel** button (tap twice) to dig it up for 25% of its price back.
 
-**The neighbor:** machines being worked make noise (the server rack most). The louder the room, the sooner your neighbor loses patience: about every 5 minutes at Low noise, 3 at Medium, 2 at High, and twice as often during quiet hours at night. They bang on the wall halfway there, then show up knocking at your window: you get 10 seconds to walk up to every machine to switch it off. If anything is still running when the countdown ends, you pay a noise fine that doubles with each complaint ($50, $100, $200...). Once they leave, walk up to your machines to switch them back on.
+**The neighbor:** machines being worked make noise (the GPU rig and server rack most). The louder the room, the sooner your neighbor loses patience: about every 5 minutes at Low noise, 3 at Medium, 2 at High, and twice as often during quiet hours at night. They bang on the wall halfway there, then show up knocking at your window: you get 10 seconds to walk up to every machine to switch it off. If anything is still running when the countdown ends, you pay a noise fine that doubles with each complaint ($50, $100, $200...). Once they leave, walk up to your machines to switch them back on.
 
 **Day and night:** a clock next to your cash runs a full day every 10 minutes of play. From 10 PM to 6 AM it's night: the room gets darker and it's quiet hours, so your neighbor (trying to sleep) gets annoyed twice as fast.
 
