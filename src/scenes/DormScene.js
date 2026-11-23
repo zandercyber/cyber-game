@@ -49,6 +49,7 @@ export class DormScene extends Phaser.Scene {
     this.load.image(DORM.background, asset('rooms/dorm.jpg'));
     this.load.spritesheet('player', asset('player/zander.png'), { frameWidth: 32, frameHeight: 52 });
     this.load.spritesheet('augustus', asset('augustus/augustus.png'), { frameWidth: 20, frameHeight: 26 });
+    this.load.spritesheet('nero', asset('nero/nero.png'), { frameWidth: 28, frameHeight: 30 });
     for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, asset(item.file));
     for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, asset(file));
   }
@@ -59,6 +60,7 @@ export class DormScene extends Phaser.Scene {
     // Pixel art stays crisp when scaled up; the painted room stays smooth.
     this.textures.get('player').setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get('augustus').setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.textures.get('nero').setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     // Everything feet can't enter. Installing an item adds its footprint here,
     // and the walk check below always reads the current list.
@@ -918,6 +920,7 @@ export class DormScene extends Phaser.Scene {
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
       agents: this.agents.map((a) => ({
         type: a.type, awake: Math.round(a.awake), nap: Math.ceil(a.nap), carried: a.carried, x: Math.round(a.x), y: Math.round(a.y),
+        ...(a.rogueCfg ? { rogue: a.state === 'rogue', rogueIn: Math.round(a.rogueIn), quarantine: Math.ceil(a.quarantine) } : {}),
       })),
       arrivals: this.arrivals.map((a) => ({ type: a.type, remaining: Math.ceil(a.remaining) })),
       agentLevels: this.agentLevels,
@@ -968,7 +971,9 @@ export class DormScene extends Phaser.Scene {
     for (const a of save.agents) {
       const ok = a.position && this.player.canStandAt(a.position.x, a.position.y);
       const pos = ok ? a.position : { x: DORM.deliverySpot.x, y: DORM.deliverySpot.y + 20 };
-      this.spawnAgent(a.type, { ...pos, awake: a.awake, nap: a.nap, carried: a.carried });
+      this.spawnAgent(a.type, {
+        ...pos, awake: a.awake, nap: a.nap, carried: a.carried, rogue: a.rogue, rogueIn: a.rogueIn, quarantine: a.quarantine,
+      });
     }
     this.arrivals = save.arrivals.map((a) => ({ ...a }));
     this.restoreStation(this.deskStation, save.desk);
@@ -1147,7 +1152,7 @@ export class DormScene extends Phaser.Scene {
   // ---------- Debug (?debug or #debug) ----------
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
-  // U unlock the shop, D deliver all orders now, G hire an Augustus now, Q questions on every job.
+  // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, Q questions on every job.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1170,6 +1175,12 @@ export class DormScene extends Phaser.Scene {
     });
     this.input.keyboard.on('keydown-G', () => { // an Augustus, free and right now
       if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'augustus', remaining: 0.1 });
+    });
+    this.input.keyboard.on('keydown-N', () => { // a Nero, free and right now
+      if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'nero', remaining: 0.1 });
+    });
+    this.input.keyboard.on('keydown-X', () => { // the first Nero goes rogue now
+      this.agents.find((a) => a.rogueCfg && a.state !== 'rogue')?.goRogue();
     });
     this.drawDebug();
   }

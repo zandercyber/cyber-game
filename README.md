@@ -12,6 +12,8 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **AI agents** (the shop's **Agents** tab): run up to 3, any mix. **Augustus** rides a cloud, works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. The first costs $300 and each extra Augustus costs double the last. Upgrades (speed, profit, energy) apply to every agent of that type.
 
+**Nero** ($2,500) is the high-risk, high-reward agent: he works at your full speed for +50% pay and never naps, but about every 5 minutes he **goes rogue**, racing between machines and frying them. Stay right next to him for 3 seconds to contain him; he's quarantined for a minute, then goes back to work. His **stability** upgrade makes it happen less often.
+
 **Your upgrades** (the shop's **You** tab): **carry limit** (you start holding up to $100; bigger piles take more than one trip) and **speed** (+10% per level). 5 levels each.
 
 **Play:** https://zandercyber.github.io/cyber-game/ (after Pages is enabled)
@@ -40,7 +42,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **Q** a security question on every job.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **Q** a security question on every job.
 
 ## Project structure
 

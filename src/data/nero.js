@@ -1,0 +1,52 @@
+// Nero, the high-risk, high-reward AI agent. Stronger than Augustus (works at
+// your full speed, +50% pay, never naps), but about every 5 minutes he goes
+// rogue: he races between machines frying them until you catch him by staying
+// right next to him for 3 seconds. Then he's quarantined for a minute.
+// All numbers are first guesses to tune.
+
+export const NERO = {
+  hirePrice: 2500, // doubles for each extra Nero
+  arriveSeconds: 8,
+  moveSpeed: 190, // world pixels per second (you move at 240)
+  workRate: 1, // same job speed as you
+  payBonus: 1.5, // +50% pay on jobs he does
+  scale: 3, // sprite sheet is drawn at 3x (28x30 frames)
+  rogue: {
+    every: [240, 360], // seconds between rogue episodes, picked at random (about every 5 minutes)
+    speed: 1.4, // he moves this much faster while rogue
+    hackSeconds: 2, // time at a machine before he fries it
+    catchSeconds: 3, // stay next to him this long to contain him
+    catchRange: 75, // how close counts as "next to him"
+    catchDecay: 0.35, // share of the catch lost per second when you're not next to him
+    quarantineSeconds: 60,
+  },
+};
+
+export const NERO_UPGRADES = {
+  speed: {
+    name: 'Nero speed',
+    prices: [400, 800, 1600, 3200, 6400],
+    describe: (lvl) => `Floats and works ${15 * lvl}% faster`,
+  },
+  profit: {
+    name: 'Nero profit',
+    prices: [500, 1000, 2000, 4000, 8000],
+    describe: (lvl) => `+${50 + 15 * lvl}% pay on jobs he does`,
+  },
+  stability: {
+    name: 'Nero stability',
+    prices: [300, 600, 1200, 2400, 4800],
+    describe: (lvl) => (lvl === 0 ? 'Goes rogue about every 5 minutes' : `Goes rogue ${Math.round(100 - 100 / (1 + 0.25 * lvl))}% less often`),
+  },
+};
+
+/** What Nero can do at the given upgrade levels. */
+export function neroStats(levels) {
+  return {
+    moveSpeed: NERO.moveSpeed * (1 + 0.15 * levels.speed),
+    workRate: NERO.workRate * (1 + 0.15 * levels.speed),
+    payBonus: NERO.payBonus + 0.15 * levels.profit,
+    awakeSeconds: 0, // never naps
+    rogueEvery: NERO.rogue.every.map((s) => s * (1 + 0.25 * levels.stability)),
+  };
+}

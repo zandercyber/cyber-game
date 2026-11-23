@@ -1,8 +1,9 @@
-// Every kind of AI agent you can hire (Augustus now, Nero next), and the
+// Every kind of AI agent you can hire (Augustus and Nero), and the
 // rules for hiring them. Up to MAX_AGENTS in the dorm at once, any mix of types.
 // Agents of the same type share their upgrade levels.
 
 import { AUGUSTUS, AUGUSTUS_UPGRADES, augustusStats } from './augustus.js';
+import { NERO, NERO_UPGRADES, neroStats } from './nero.js';
 
 export const MAX_AGENTS = 3;
 export const AGENT_LEVEL_MAX = 5;
@@ -22,6 +23,20 @@ export const AGENT_TYPES = {
     collectAt: AUGUSTUS.collectAt,
     upgrades: AUGUSTUS_UPGRADES,
     stats: augustusStats,
+  },
+  nero: {
+    name: 'Nero',
+    blurb: 'Full speed, +50% pay, never naps. Goes rogue about every 5 min: catch him!',
+    hirePrice: NERO.hirePrice, // doubles for each extra Nero
+    arriveSeconds: NERO.arriveSeconds,
+    texture: 'nero',
+    frames: { front: 0, side: 1, rogueFront: 2, rogueSide: 3 },
+    scale: NERO.scale,
+    naps: false,
+    collectAt: 0.5,
+    rogue: NERO.rogue,
+    upgrades: NERO_UPGRADES,
+    stats: neroStats,
   },
 };
 
