@@ -2,6 +2,7 @@
 import * as Phaser from 'phaser';
 import { ITEMS, POWER_ITEMS, POWER_TIERS, SHOVEL_REFUND } from '../data/catalog.js';
 import { AGENT_TYPES } from '../data/agents.js';
+import { NEIGHBOR, noiseLevel } from '../data/neighbor.js';
 import { PLAYER_UPGRADES } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
@@ -12,6 +13,7 @@ const PANEL_BG = 0x0b0e14;
 const ACCENT = '#5ff0ff';
 const FONT = 'system-ui, sans-serif';
 const BAR_W = 150;
+const NEIGHBOR_BAR_W = 100;
 const GREEN = 0x4ade80;
 const RED = 0xf87171;
 const PURPLE = 0xc4b5fd;
@@ -41,6 +43,15 @@ export class UIScene extends Phaser.Scene {
     this.barFill = this.add.rectangle(px + 66, 58, 0, 14, 0x4ade80).setOrigin(0, 0.5);
     this.powerText = this.add.text(px + 66 + BAR_W + 10, 58, '', { fontFamily: FONT, fontSize: '16px', fontStyle: 'bold', color: '#e6f4ff' })
       .setOrigin(0, 0.5);
+
+    // Neighbor meter under the power meter: how close they are to coming over.
+    this.neighborPanel = this.panel(px, 90, 370, 46).setVisible(false);
+    this.neighborLabel = this.add.text(px + 16, 113, '', { fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: '#cbd5e1' })
+      .setOrigin(0, 0.5).setVisible(false);
+    this.neighborBarBg = this.add.rectangle(px + 140, 113, NEIGHBOR_BAR_W, 12, 0xffffff, 0.12).setOrigin(0, 0.5).setVisible(false);
+    this.neighborBar = this.add.rectangle(px + 140, 113, 0, 12, 0x4ade80).setOrigin(0, 0.5).setVisible(false);
+    this.noiseText = this.add.text(px + 140 + NEIGHBOR_BAR_W + 12, 113, '', { fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: '#e6f4ff' })
+      .setOrigin(0, 0.5).setVisible(false);
 
     this.addFullscreenButton(width, height);
     this.addNewGameButton(height);
@@ -104,6 +115,15 @@ export class UIScene extends Phaser.Scene {
     this.dorm.events.on('power-installed', onPower);
     const onRogue = (agent) => this.showBanner(`${agent.name} went rogue!`, 'He\'s frying your machines. Stay right next to him for 3 seconds to contain him.', RED);
     const onContained = (agent) => this.showBanner(`${agent.name} contained!`, 'Quarantined for 60 seconds, then he goes back to work.', 0x5ff0ff);
+    const AMBER = 0xfbbf24;
+    const onWarn = () => this.showBanner('Your neighbor is banging on the wall', 'The louder you are, the sooner they come over. Fewer machines at once = fewer visits.', AMBER);
+    const onComing = () => this.showBanner('Your neighbor is coming over!', `Walk up to every machine to switch it off. You have ${NEIGHBOR.comingSeconds} seconds.`, RED);
+    const onComplaint = ({ fine, paid, next }) => this.showBanner(`Noise complaint! -$${paid}`, `${paid < fine ? `You couldn't cover the $${fine} fine. ` : ''}The next complaint costs $${next}.`, RED);
+    const onSatisfied = () => this.showBanner('Quiet enough', 'Your neighbor grumbles and heads back home.', GREEN);
+    const onLeft = () => { if (this.dorm.switchedOffCount) this.showBanner('They\'re gone', 'Walk up to your machines to switch them back on.', 0x5ff0ff); };
+    const neighborEvents = { 'neighbor-warning': onWarn, 'neighbor-coming': onComing, 'neighbor-complaint': onComplaint, 'neighbor-satisfied': onSatisfied, 'neighbor-left': onLeft };
+    for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.on(name, fn);
+    this.events.once('shutdown', () => { for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.off(name, fn); });
     this.dorm.events.on('agent-rogue', onRogue);
     this.dorm.events.on('agent-contained', onContained);
     this.dorm.events.on('agent-arrived', onArrive);
@@ -135,7 +155,11 @@ export class UIScene extends Phaser.Scene {
     const { orders, boxes, carryBox, friedCount } = this.dorm;
     let text = '';
     const rogue = this.dorm.agents.find((a) => a.state === 'rogue');
-    if (rogue) text = `${rogue.name} went rogue: catch him!`;
+    const neighbor = this.dorm.neighbor;
+    const stillOn = this.dorm.runningMachines().length;
+    if (neighbor.state === 'coming') text = stillOn ? `Switch machines off! ${stillOn} still on · ${Math.ceil(neighbor.timer)}s` : `All off. Neighbor in ${Math.ceil(neighbor.timer)}s`;
+    else if (neighbor.state === 'visiting') text = 'Neighbor at the window: stay quiet';
+    else if (rogue) text = `${rogue.name} went rogue: catch him!`;
     else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
     else if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
     else if (carryBox) text = Object.hasOwn(POWER_ITEMS, carryBox.itemId) ? 'Take the box to the breaker panel' : 'Carry the box to an empty plot';
@@ -144,7 +168,8 @@ export class UIScene extends Phaser.Scene {
       const next = this.dorm.arrivals.reduce((a, b) => (b.remaining < a.remaining ? b : a));
       text = `${AGENT_TYPES[next.type].name} arrives in ${Math.ceil(next.remaining)}s`;
     }
-    if (this.shop.visible) text = ''; // the shop lists deliveries itself
+    else if (this.dorm.switchedOffCount && !neighbor.quiet) text = `Walk up to ${this.dorm.switchedOffCount} switched-off machine${this.dorm.switchedOffCount > 1 ? 's' : ''} to turn on`;
+    if (this.shop.visible && !neighbor.quiet) text = ''; // the shop lists deliveries itself
     this.deliveryChip.setVisible(Boolean(text));
     if (text && this.deliveryChip.text !== text) this.deliveryChip.setText(text);
   }
@@ -255,8 +280,28 @@ export class UIScene extends Phaser.Scene {
     this.shovelText.setVisible(on);
   }
 
+  // How close the neighbor is to coming over, and how loud you are (louder = sooner).
+  renderNeighbor() {
+    const n = this.dorm.neighbor;
+    const noise = this.dorm.noise;
+    const show = noise > 0 || n.annoyance > 0 || n.state !== 'calm';
+    for (const o of [this.neighborPanel, this.neighborLabel, this.neighborBarBg, this.neighborBar, this.noiseText]) o.setVisible(show);
+    if (!show) return;
+    const level = n.state === 'calm' ? n.annoyance / 100 : 1;
+    this.neighborBar.width = level * NEIGHBOR_BAR_W;
+    this.neighborBar.fillColor = level >= 0.8 ? 0xf87171 : level >= NEIGHBOR.warnAt / 100 ? 0xfacc15 : 0x4ade80;
+    let label = 'NEIGHBOR';
+    if (n.state === 'coming') label = 'COMING OVER';
+    else if (n.state === 'visiting') label = 'AT THE WINDOW';
+    if (this.neighborLabel.text !== label) this.neighborLabel.setText(label).setColor(n.quiet ? '#fca5a5' : '#cbd5e1');
+    const loudness = noiseLevel(noise);
+    const text = loudness ? `Noise: ${loudness.name}` : 'Silent';
+    if (this.noiseText.text !== text) this.noiseText.setText(text).setColor(loudness ? loudness.color : '#94a3b8');
+  }
+
   update() {
     this.questionPanel.update();
+    this.renderNeighbor();
     const plot = this.dorm.shovelTarget?.() ?? null;
     if (plot !== this.shovelPlot) {
       this.shovelPlot = plot;

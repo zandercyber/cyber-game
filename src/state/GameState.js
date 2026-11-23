@@ -42,6 +42,14 @@ class GameState extends Phaser.Events.EventEmitter {
     return true;
   }
 
+  /** Takes up to `amount` (a fine): whatever you have, never below $0. Returns what was taken. */
+  charge(amount) {
+    const taken = Math.min(this.cash, amount);
+    this.cash -= taken;
+    this.emit('cash', this.cash, -taken);
+    return taken;
+  }
+
   setPowerUsed(watts) {
     this.powerUsed = watts;
     this.emit('power', this.power);

@@ -7,6 +7,7 @@
 // - With no power (breaker tripped) nothing runs; the machine just cools.
 // - When you (not a helper) finish a job, a security question can pop up first:
 //   right = double pay, wrong or too slow = the job fails (see DormScene.askQuestion).
+// - It can be switched off (to keep the neighbor happy): no work, no noise.
 // - A power surge can fry it. A fried machine smokes and earns nothing until
 //   you stand at it (with the power on) to repair it.
 
@@ -27,6 +28,7 @@ export class HustleStation {
     this.powered = true; // false while the breaker is tripped
     this.sprite = sprite; // the machine's picture (darkened while fried)
     this.broken = false; // fried by a power surge
+    this.switchedOff = false; // switched off for the neighbor
     this.group = group; // which security questions it asks ('helpdesk' | 'web' | 'ai')
     this.awaiting = null; // a finished job waiting on your answer: { bonus }
     this.repairProgress = 0;
@@ -101,6 +103,15 @@ export class HustleStation {
       return false;
     }
     if (this.broken) return this.updateBroken(dt, { canWork: canWork && !helper, near, handsFull });
+    if (this.switchedOff) {
+      this.working = false;
+      if (h) {
+        this.heat = Math.max(0, this.heat - (this.overheated ? h.perSecondCooling : h.idleCooling) * dt);
+        if (this.heat === 0) this.overheated = false;
+      }
+      this.render(dt, { near, handsFull: false });
+      return false;
+    }
     if (this.awaiting) {
       // Paused on a security question; it just cools while you answer.
       this.working = false;
@@ -175,7 +186,8 @@ export class HustleStation {
       this.sprite?.setTint(0x6b6b6b);
       if (!quiet) this.floatText('FRIED!', this.panel.x, this.panel.y - 40, '#f87171');
     } else {
-      this.sprite?.clearTint();
+      if (this.switchedOff) this.sprite?.setTint(0x9ca3af);
+      else this.sprite?.clearTint();
       if (!quiet) {
         this.floatText('Fixed!', this.panel.x, this.panel.y - 40, '#4ade80');
         this.scene.events.emit('machine-repaired');
@@ -190,6 +202,18 @@ export class HustleStation {
       return;
     }
     this.payJob(bonus);
+  }
+
+  /** Switches the machine off or back on. quiet: no effects (used when loading a save). */
+  setSwitchedOff(off, { quiet = false } = {}) {
+    if (off === this.switchedOff) return;
+    this.switchedOff = off;
+    this.working = false;
+    if (!this.broken) {
+      if (off) this.sprite?.setTint(0x9ca3af);
+      else this.sprite?.clearTint();
+    }
+    if (!quiet) this.floatText(off ? 'Off' : 'On', this.panel.x, this.panel.y - 40, off ? '#cbd5e1' : '#4ade80');
   }
 
   /** Your answer to this job's security question. Returns what it paid (0 if it failed). */
@@ -229,9 +253,9 @@ export class HustleStation {
   }
 
   render(dt, { near, handsFull }) {
-    this.panel.setVisible(near || this.broken || (this.overheated && this.powered) || this.helperWorking);
+    this.panel.setVisible(near || this.broken || this.switchedOff || (this.overheated && this.powered) || this.helperWorking);
     // Job titles only when you're close, or for something that needs you.
-    this.title.setVisible(near || this.broken || Boolean(this.awaiting) || this.overheated || !this.powered);
+    this.title.setVisible(near || this.broken || this.switchedOff || Boolean(this.awaiting) || this.overheated || !this.powered);
     this.progressFill.width = Math.min(1, this.broken ? this.repairProgress : this.progress) * BAR_W;
     this.progressFill.fillColor = this.broken ? 0xf97316 : 0x5ff0ff;
     if (this.heatCfg) {
@@ -244,6 +268,9 @@ export class HustleStation {
     if (this.awaiting) {
       text = 'Security check! Answer the question';
       bg = STATUS_COLORS.quiz;
+    } else if (this.switchedOff && !this.broken) {
+      text = 'OFF';
+      bg = '#334155ee';
     } else if (this.broken) {
       if (!near) text = 'FRIED'; // short from afar, so several fried machines don't clutter the room
       else if (!this.powered) text = 'Fried! Reset the breaker first';

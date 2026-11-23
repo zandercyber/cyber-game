@@ -16,6 +16,7 @@ import {
 } from '../data/hustles.js';
 import { readSave, writeSave } from '../state/save.js';
 import { Agent } from '../systems/Agent.js';
+import { Neighbor } from '../systems/Neighbor.js';
 import {
   AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS, agentName, hirePrice, isAgentType, noAgentLevels,
 } from '../data/agents.js';
@@ -50,6 +51,9 @@ export class DormScene extends Phaser.Scene {
     this.load.spritesheet('player', asset('player/zander.png'), { frameWidth: 32, frameHeight: 52 });
     this.load.spritesheet('augustus', asset('augustus/augustus.png'), { frameWidth: 20, frameHeight: 26 });
     this.load.spritesheet('nero', asset('nero/nero.png'), { frameWidth: 28, frameHeight: 30 });
+    this.load.spritesheet('neighbor', asset('neighbor/neighbor.png'), { frameWidth: 38, frameHeight: 52 });
+    this.load.image('window-open', asset('neighbor/window-open.png'));
+    this.load.image('window-sky', asset('neighbor/window-sky.png'));
     for (const [id, item] of Object.entries(ITEMS)) this.load.image(`station-${id}`, asset(item.file));
     for (const [key, file] of Object.entries(SMALL_IMAGES)) this.load.image(key, asset(file));
   }
@@ -142,6 +146,10 @@ export class DormScene extends Phaser.Scene {
     this.arrivals = []; // hired, floating in through the door: { type, remaining }
     this.agentLevels = Object.fromEntries(AGENT_TYPE_IDS.map((type) => [type, noAgentLevels(type)]));
 
+    // The neighbor next door, and how loud you are right now.
+    this.neighbor = new Neighbor(this);
+    this.noise = 0;
+
     // Pick up where you left off, then keep saving automatically.
     this.restoreProgress();
     this.setupAutosave();
@@ -214,7 +222,9 @@ export class DormScene extends Phaser.Scene {
     });
     // You stand in front of the machine (below it on screen) to work or collect.
     const spot = { x: plot.x, y: plot.y + 72, reach: earns.mode === 'idle' ? 110 : 80 };
-    return this.addStation({ id: plot.id, spot, hustle, plotId: plot.id });
+    const station = this.addStation({ id: plot.id, spot, hustle, plotId: plot.id });
+    station.noise = ITEMS[plot.itemId].noise ?? 0;
+    return station;
   }
 
   updateStations(dt) {
@@ -232,6 +242,7 @@ export class DormScene extends Phaser.Scene {
       const near = dist < st.spot.reach;
       if (st.near && !near) this.collectFrom(st); // walking away takes its cash
       st.near = near;
+      if (near) this.flipSwitch(st);
       const workable = !st.hustle.idle || st.hustle.broken; // idle machines only need you to repair them
       if (near && workable && st.hustle.enabled && dist < bestDist) {
         workTarget = st;
@@ -255,10 +266,32 @@ export class DormScene extends Phaser.Scene {
       });
       if (busy && atThis) working = true;
     }
+
+    // Machines being worked make noise; too much for too long brings the neighbor over.
+    this.noise = this.stations.reduce((sum, st) => sum + (st.hustle.working ? st.noise ?? 0 : 0), 0);
+    this.neighbor.update(dt, this.noise);
     this.player.setWorking(working || this.resetting);
   }
 
   /** Picks up a machine's cash pile, as much as fits in your hands (all: ignore the limit). */
+  // While the neighbor is knocking or at the window, walking up to a machine switches it off.
+  // Any other time, walking up to a switched-off machine switches it back on.
+  flipSwitch(station) {
+    if (!station.plotId) return;
+    const h = station.hustle;
+    if (this.neighbor.quiet && !h.switchedOff) h.setSwitchedOff(true);
+    else if (!this.neighbor.quiet && h.switchedOff) h.setSwitchedOff(false);
+  }
+
+  /** Machines that would make the neighbor mad: on, powered and not fried. */
+  runningMachines() {
+    return this.stations.filter((st) => st.plotId && !st.hustle.switchedOff && st.hustle.powered && !st.hustle.broken);
+  }
+
+  get switchedOffCount() {
+    return this.stations.filter((st) => st.hustle.switchedOff).length;
+  }
+
   collectFrom(station, { all = false } = {}) {
     if (this.carryBox) return; // hands are busy with a box; the cash waits
     const pile = station.hustle.pile;
@@ -926,19 +959,21 @@ export class DormScene extends Phaser.Scene {
       agentLevels: this.agentLevels,
       questionsSeen: this.questionsSeen,
       playerLevels: this.playerLevels,
+      neighbor: this.neighbor.saveState,
     });
   }
 
   stationState(station) {
     const h = station.hustle;
-    return { pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken };
+    return { pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken, off: h.switchedOff };
   }
 
   restoreStation(station, state) {
     if (!station || !state) return;
-    const { broken, ...rest } = state;
+    const { broken, off, ...rest } = state;
     Object.assign(station.hustle, rest);
     if (broken && station.plotId) station.hustle.setBroken(true, { quiet: true });
+    if (off && station.plotId) station.hustle.setSwitchedOff(true, { quiet: true });
     station.hustle.renderPile();
   }
 
@@ -966,6 +1001,7 @@ export class DormScene extends Phaser.Scene {
     if (save.tripped) this.trip({ silent: true });
     this.questionsSeen = save.questionsSeen;
     this.playerLevels = { ...save.playerLevels };
+    this.neighbor.restore(save.neighbor);
     this.applyPlayerStats();
     this.agentLevels = save.agentLevels;
     for (const a of save.agents) {
@@ -1152,7 +1188,7 @@ export class DormScene extends Phaser.Scene {
   // ---------- Debug (?debug or #debug) ----------
   // green = walkable floor, red = blocked, yellow = interaction spots, dot = your feet.
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
-  // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, Q questions on every job.
+  // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, L the neighbor comes over now, Q questions on every job.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1175,6 +1211,9 @@ export class DormScene extends Phaser.Scene {
     });
     this.input.keyboard.on('keydown-G', () => { // an Augustus, free and right now
       if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'augustus', remaining: 0.1 });
+    });
+    this.input.keyboard.on('keydown-L', () => { // the neighbor comes over now
+      if (this.neighbor.state === 'calm') this.neighbor.startComing();
     });
     this.input.keyboard.on('keydown-N', () => { // a Nero, free and right now
       if (this.agentCount() < MAX_AGENTS) this.arrivals.push({ type: 'nero', remaining: 0.1 });
