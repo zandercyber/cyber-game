@@ -1,6 +1,7 @@
-// Augustus, the AI agent helper. He floats around the room on his cloud and,
-// every time he finishes something, picks the first thing on this list:
-//   1. Out of energy: stash any cash he holds, then nap 1 minute ("resetting credits").
+// An AI agent helper (Augustus, and the other types in src/data/agents.js).
+// Agents float around the room on a cloud and, every time they finish
+// something, pick the first thing on this list:
+//   1. Out of energy (types that nap): stash any cash held, then nap ("resetting credits").
 //   2. Holding cash: carry it to the hamper.
 //   3. A cash pile at least half full: go scoop it up.
 //   4. The best-paying machine he can use: go work it until it overheats or its
@@ -9,30 +10,31 @@
 //   6. Nothing to do: hover by the hamper (with a ⚡ bubble if the power is out).
 // He skips fried, overheated, full or unpowered machines and the one you're at.
 // He never resets the breaker, repairs, carries boxes or shops: that's your job.
-// The scene keeps a list of agents, so more than one can run at once later.
+// The scene keeps a list of agents (up to MAX_AGENTS); they never pick the same machine.
 
-import { AUGUSTUS, augustusStats } from '../data/augustus.js';
+import { AGENT_TYPES } from '../data/agents.js';
 import { DORM } from '../data/dorm.js';
 import { findPath } from './pathfinding.js';
 import { gameState } from '../state/GameState.js';
 
 const HOVER = 16; // how far his cloud floats above the floor
-const FRAME = { front: 0, side: 1, drowsy: 2, sleep: [3, 4, 5] };
 const FONT = 'system-ui, sans-serif';
-const PARK = { x: 240, y: 610 }; // where he hovers when there's nothing to do
+const PARK = { x: 240, y: 610 }; // where agents hover when there's nothing to do (side by side)
 
-export class Augustus {
+export class Agent {
   /**
-   * scene: the DormScene (stations, navGrid, player). levels: shop upgrade levels.
-   * awake / nap / carried: restored from a save.
+   * scene: the DormScene (stations, navGrid, player). type: a key of AGENT_TYPES.
+   * levels: that type's shop upgrade levels. awake / nap / carried: restored from a save.
    */
-  constructor(scene, { x, y, levels, awake = null, nap = 0, carried = 0, arriving = false }) {
+  constructor(scene, { type, name, x, y, levels, awake = null, nap = 0, carried = 0, arriving = false }) {
     this.scene = scene;
-    this.name = 'Augustus';
+    this.type = type;
+    this.cfg = AGENT_TYPES[type];
+    this.name = name;
     this.x = x;
     this.y = y;
     this.levels = { ...levels };
-    this.stats = augustusStats(this.levels);
+    this.stats = this.cfg.stats(this.levels);
     this.awake = awake ?? this.stats.awakeSeconds;
     this.nap = nap;
     this.carried = carried;
@@ -47,7 +49,7 @@ export class Augustus {
     this.zTimer = 0;
 
     this.shadow = scene.add.ellipse(x, y, 54, 14, 0x000000, 0.22);
-    this.sprite = scene.add.sprite(x, y, 'augustus', FRAME.front).setOrigin(0.5, 1).setScale(AUGUSTUS.scale);
+    this.sprite = scene.add.sprite(x, y, this.cfg.texture, this.cfg.frames.front).setOrigin(0.5, 1).setScale(this.cfg.scale);
     this.bubble = scene.add.text(x, y, '⚡', { fontFamily: FONT, fontSize: '26px' }).setOrigin(0.5, 1).setVisible(false);
     this.label = scene.add.text(x, y, '', {
       fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: '#c4b5fd',
@@ -65,7 +67,7 @@ export class Augustus {
   setLevels(levels) {
     const before = this.stats.awakeSeconds;
     this.levels = { ...levels };
-    this.stats = augustusStats(this.levels);
+    this.stats = this.cfg.stats(this.levels);
     this.awake += this.stats.awakeSeconds - before; // an energy upgrade tops him up right away
   }
 
@@ -112,10 +114,10 @@ export class Augustus {
       this.drowsyFor -= dt;
       if (this.drowsyFor <= 0) {
         this.state = 'sleeping';
-        this.nap = AUGUSTUS.napSeconds;
+        this.nap = this.cfg.napSeconds;
       }
     } else {
-      this.awake = Math.max(0, this.awake - dt);
+      if (this.cfg.naps) this.awake = Math.max(0, this.awake - dt);
       if (this.state === 'moving') this.followPath(dt);
       else if (this.state === 'working') this.keepWorking();
       else {
@@ -132,15 +134,19 @@ export class Augustus {
   // ---------- Deciding ----------
 
   think() {
-    if (this.awake <= 0) return this.carried > 0 ? this.goStash() : this.fallAsleep();
+    if (this.tired) return this.carried > 0 ? this.goStash() : this.fallAsleep();
     if (this.carried > 0) return this.goStash();
-    const pile = this.bestPile(AUGUSTUS.collectAt);
+    const pile = this.bestPile(this.cfg.collectAt);
     if (pile) return this.goTo('collect', pile);
     const machine = this.bestMachine();
     if (machine) return this.goTo('work', machine);
     const anyPile = this.bestPile(0);
     if (anyPile) return this.goTo('collect', anyPile);
     return this.park();
+  }
+
+  get tired() {
+    return this.cfg.naps && this.awake <= 0;
   }
 
   /** Someone else (you, or another agent) is using or heading to this station. */
@@ -195,12 +201,14 @@ export class Augustus {
     this.goTo('stash', null, x + 40, y + 40);
   }
 
+  // Agents park side by side, so they don't stack on top of each other.
   park() {
-    if (Math.hypot(this.x - PARK.x, this.y - PARK.y) < 30) {
+    const x = PARK.x + Math.max(0, this.scene.agents.indexOf(this)) * 70;
+    if (Math.hypot(this.x - x, this.y - PARK.y) < 30) {
       this.state = 'idle';
       return;
     }
-    this.goTo('park', null, PARK.x, PARK.y);
+    this.goTo('park', null, x, PARK.y);
   }
 
   fallAsleep() {
@@ -208,7 +216,7 @@ export class Augustus {
     this.path = null;
     this.station = null;
     this.state = 'drowsy';
-    this.drowsyFor = AUGUSTUS.drowsySeconds;
+    this.drowsyFor = this.cfg.drowsySeconds;
     this.float('Yawn…', '#c4b5fd');
   }
 
@@ -263,7 +271,7 @@ export class Augustus {
     const gone = !this.scene.stations.includes(st); // shoveled
     const h = st?.hustle;
     const youAreHere = st?.near && !this.scene.player.moving;
-    if (!gone && h.enabled && h.powered && !h.broken && !h.overheated && !h.pileFull && !youAreHere && this.awake > 0) return;
+    if (!gone && h.enabled && h.powered && !h.broken && !h.overheated && !h.pileFull && !youAreHere && !this.tired) return;
     this.station = null;
     this.state = 'idle';
     this.thinkIn = 0.2;
@@ -286,13 +294,14 @@ export class Augustus {
     this.sprite.setPosition(this.x, top).setDepth(this.y);
     this.shadow.setPosition(this.x, this.y).setDepth(this.y - 1).setScale(1 - bob / 40);
 
-    let frame = FRAME.front;
+    const frames = this.cfg.frames;
+    let frame = frames.front;
     let flip = false;
-    if (sleeping) frame = FRAME.sleep[Math.floor(this.t / 0.7) % 3];
-    else if (this.state === 'drowsy') frame = FRAME.drowsy;
-    else if (this.state === 'working') frame = FRAME.side;
+    if (sleeping) frame = frames.sleep[Math.floor(this.t / 0.7) % frames.sleep.length];
+    else if (this.state === 'drowsy') frame = frames.drowsy;
+    else if (this.state === 'working') frame = frames.side;
     else if (this.state === 'moving' && Math.abs(this.vx) > Math.abs(this.vy) * 0.6) {
-      frame = FRAME.side;
+      frame = frames.side;
       flip = this.vx < 0;
     }
     if (this.sprite.frame.name !== frame) this.sprite.setFrame(frame);
