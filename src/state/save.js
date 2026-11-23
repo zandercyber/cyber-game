@@ -101,8 +101,16 @@ export function readSave({ plotIds, pileMax }) {
   const agents = rawAgents.map(obj).filter((a) => isAgentType(a.type)).slice(0, MAX_AGENTS).map((a) => {
     const cfg = AGENT_TYPES[a.type];
     const maxAwake = cfg.stats(agentLevels[a.type]).awakeSeconds;
+    const rogue = cfg.rogue
+      ? {
+        rogue: a.rogue === true,
+        rogueIn: Number.isFinite(a.rogueIn) ? num(a.rogueIn, 0, cfg.stats(agentLevels[a.type]).rogueEvery[1]) : null,
+        quarantine: num(a.quarantine, 0, cfg.rogue.quarantineSeconds),
+      }
+      : {};
     return {
       type: a.type,
+      ...rogue,
       awake: num(a.awake, 0, maxAwake, maxAwake),
       nap: num(a.nap, 0, cfg.napSeconds ?? 0),
       carried: int(a.carried, 0, MAX_CASH),

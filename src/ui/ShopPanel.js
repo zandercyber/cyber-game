@@ -27,7 +27,7 @@ const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 // Thumbnail per agent upgrade: the agent's own frames (speed = side view, energy = asleep).
 function agentThumb(type, kind) {
   const { texture, frames } = AGENT_TYPES[type];
-  const frame = { speed: frames.side, energy: frames.sleep?.[0] }[kind] ?? frames.front;
+  const frame = { speed: frames.side, energy: frames.sleep?.[0], stability: frames.rogueFront }[kind] ?? frames.front;
   return [texture, frame, 2.4];
 }
 

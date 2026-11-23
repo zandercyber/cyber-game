@@ -102,6 +102,10 @@ export class UIScene extends Phaser.Scene {
     const onPlayerUpgrade = (kind, level) => this.showBanner('Upgraded!', `${PLAYER_UPGRADES[kind].name}: ${PLAYER_UPGRADES[kind].describe(level).toLowerCase()}.`);
     this.dorm.events.on('breaker-tripped', onTrip);
     this.dorm.events.on('power-installed', onPower);
+    const onRogue = (agent) => this.showBanner(`${agent.name} went rogue!`, 'He\'s frying your machines. Stay right next to him for 3 seconds to contain him.', RED);
+    const onContained = (agent) => this.showBanner(`${agent.name} contained!`, 'Quarantined for 60 seconds, then he goes back to work.', 0x5ff0ff);
+    this.dorm.events.on('agent-rogue', onRogue);
+    this.dorm.events.on('agent-contained', onContained);
     this.dorm.events.on('agent-arrived', onArrive);
     this.dorm.events.on('agent-upgraded', onUpgrade);
     this.dorm.events.on('player-upgraded', onPlayerUpgrade);
@@ -118,6 +122,8 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('breaker-tripped', onTrip);
       this.dorm.events.off('power-installed', onPower);
       this.dorm.events.off('agent-arrived', onArrive);
+      this.dorm.events.off('agent-rogue', onRogue);
+      this.dorm.events.off('agent-contained', onContained);
       this.dorm.events.off('agent-upgraded', onUpgrade);
       this.dorm.events.off('player-upgraded', onPlayerUpgrade);
       this.dorm.events.off('question', onQuestion);
@@ -128,7 +134,9 @@ export class UIScene extends Phaser.Scene {
   renderDeliveryChip() {
     const { orders, boxes, carryBox, friedCount } = this.dorm;
     let text = '';
-    if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
+    const rogue = this.dorm.agents.find((a) => a.state === 'rogue');
+    if (rogue) text = `${rogue.name} went rogue: catch him!`;
+    else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
     else if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
     else if (carryBox) text = Object.hasOwn(POWER_ITEMS, carryBox.itemId) ? 'Take the box to the breaker panel' : 'Carry the box to an empty plot';
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;

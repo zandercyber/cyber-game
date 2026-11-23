@@ -11,6 +11,10 @@
 // He skips fried, overheated, full or unpowered machines and the one you're at.
 // He never resets the breaker, repairs, carries boxes or shops: that's your job.
 // The scene keeps a list of agents (up to MAX_AGENTS); they never pick the same machine.
+//
+// Types with a `rogue` config (Nero) go rogue every few minutes: they race from
+// machine to machine frying them until you stay right next to them for a few
+// seconds. Then they're quarantined for a minute and go back to work.
 
 import { AGENT_TYPES } from '../data/agents.js';
 import { DORM } from '../data/dorm.js';
@@ -20,13 +24,16 @@ import { gameState } from '../state/GameState.js';
 const HOVER = 16; // how far his cloud floats above the floor
 const FONT = 'system-ui, sans-serif';
 const PARK = { x: 240, y: 610 }; // where agents hover when there's nothing to do (side by side)
+const LOAD_GRACE = 5; // seconds after loading before a rogue agent can fry anything
 
 export class Agent {
   /**
    * scene: the DormScene (stations, navGrid, player). type: a key of AGENT_TYPES.
    * levels: that type's shop upgrade levels. awake / nap / carried: restored from a save.
    */
-  constructor(scene, { type, name, x, y, levels, awake = null, nap = 0, carried = 0, arriving = false }) {
+  constructor(scene, {
+    type, name, x, y, levels, awake = null, nap = 0, carried = 0, arriving = false, rogue = false, rogueIn = null, quarantine = 0,
+  }) {
     this.scene = scene;
     this.type = type;
     this.cfg = AGENT_TYPES[type];
@@ -57,6 +64,17 @@ export class Agent {
     }).setOrigin(0.5, 1).setVisible(false);
     this.stack = [];
 
+    // Going rogue (types with a rogue config).
+    this.rogueCfg = this.cfg.rogue ?? null;
+    this.rogueIn = rogueIn ?? this.nextRogueIn();
+    this.catchProgress = 0;
+    this.hackFor = 0;
+    this.target = null; // the machine he's about to fry
+    this.quarantine = quarantine;
+    if (this.rogueCfg && quarantine > 0) this.state = 'quarantined';
+    if (this.rogueCfg && rogue) this.state = 'rogue';
+    this.ring = scene.add.graphics().setDepth(12440); // catch progress, quarantine field
+
     if (arriving) {
       // Floats in through the door.
       this.sprite.setAlpha(0);
@@ -84,8 +102,10 @@ export class Agent {
     return this.state === 'working' ? this.station : null;
   }
 
-  /** One short line for the shop's Upgrades tab. */
+  /** One short line for the shop's roster. */
   get status() {
+    if (this.state === 'rogue') return 'ROGUE! Frying machines. Catch him!';
+    if (this.state === 'quarantined') return `Quarantined: ${Math.ceil(this.quarantine)}s`;
     if (this.state === 'sleeping') return `Napping to reset credits: ${Math.ceil(this.nap)}s`;
     if (this.state === 'drowsy') return 'Getting sleepy…';
     if (this.state === 'working') return `Working: ${this.machineName(this.station)}`;
@@ -102,7 +122,17 @@ export class Agent {
 
   update(dt) {
     this.t += dt;
-    if (this.state === 'sleeping') {
+    if (this.state === 'rogue') {
+      this.updateRogue(dt);
+    } else if (this.state === 'quarantined') {
+      this.quarantine -= dt;
+      if (this.quarantine <= 0) {
+        this.quarantine = 0;
+        this.state = 'idle';
+        this.rogueIn = this.nextRogueIn();
+        this.float('Back to work', '#5ff0ff');
+      }
+    } else if (this.state === 'sleeping') {
       this.nap -= dt;
       if (this.nap <= 0) {
         this.nap = 0;
@@ -118,6 +148,14 @@ export class Agent {
       }
     } else {
       if (this.cfg.naps) this.awake = Math.max(0, this.awake - dt);
+      if (this.rogueCfg && this.scene.playTime > LOAD_GRACE) {
+        this.rogueIn -= dt;
+        if (this.rogueIn <= 0) {
+          this.goRogue();
+          this.render(dt);
+          return;
+        }
+      }
       if (this.state === 'moving') this.followPath(dt);
       else if (this.state === 'working') this.keepWorking();
       else {
@@ -229,22 +267,26 @@ export class Agent {
       this.thinkIn = 0;
       return;
     }
+    if (this.stepAlongPath(this.stats.moveSpeed * dt)) this.arrive();
+  }
+
+  /** Moves along this.path by `step` pixels. Returns true on reaching the end. */
+  stepAlongPath(step) {
     const target = this.path[0];
     const dx = target.x - this.x;
     const dy = target.y - this.y;
     const dist = Math.hypot(dx, dy);
-    const step = this.stats.moveSpeed * dt;
     if (dist <= step) {
       this.x = target.x;
       this.y = target.y;
       this.path.shift();
-      if (this.path.length === 0) this.arrive();
-      return;
+      return this.path.length === 0;
     }
     this.vx = dx / dist;
     this.vy = dy / dist;
     this.x += this.vx * step;
     this.y += this.vy * step;
+    return false;
   }
 
   arrive() {
@@ -285,6 +327,77 @@ export class Agent {
     this.float(`+$${amount}`, '#b8ffcf');
   }
 
+  // ---------- Going rogue (Nero) ----------
+
+  nextRogueIn() {
+    const [low, high] = this.stats.rogueEvery ?? [Infinity, Infinity];
+    return low + Math.random() * (high - low);
+  }
+
+  goRogue() {
+    this.station = null; // walks off the job; its cash stays on the machine
+    this.goal = null;
+    this.path = null;
+    this.target = null;
+    this.hackFor = 0;
+    this.catchProgress = 0;
+    this.state = 'rogue';
+    this.scene.sparks(this.x, this.y - 60);
+    this.scene.events.emit('agent-rogue', this);
+  }
+
+  // Races between machines and fries each one, until you stay next to him long enough.
+  updateRogue(dt) {
+    const r = this.rogueCfg;
+    const { player } = this.scene;
+    const near = Math.hypot(player.x - this.x, player.y - this.y) < r.catchRange;
+    this.catchProgress = near
+      ? this.catchProgress + dt / r.catchSeconds
+      : Math.max(0, this.catchProgress - r.catchDecay * dt);
+    if (this.catchProgress >= 1) {
+      this.contain();
+      return;
+    }
+
+    const lost = this.target && (!this.scene.stations.includes(this.target) || this.target.hustle.broken);
+    if (!this.target || lost) this.pickVictim();
+    if (this.path?.length) {
+      this.stepAlongPath(this.stats.moveSpeed * r.speed * dt);
+      return;
+    }
+    if (!this.target) return; // wandering: picks a new spot next frame
+    if (this.scene.playTime < LOAD_GRACE) return;
+    this.hackFor += dt;
+    if (this.hackFor >= r.hackSeconds) {
+      const st = this.target;
+      st.hustle.setBroken(true);
+      const plot = this.scene.plots.find((p) => p.id === st.plotId);
+      if (plot?.sprite) this.scene.sparks(plot.x, plot.sprite.y - plot.sprite.height / 2);
+      this.scene.events.emit('agent-fried', this, st);
+      this.target = null;
+    }
+  }
+
+  // A random machine that still works; if none are left, wander to a random plot.
+  pickVictim() {
+    this.hackFor = 0;
+    const victims = this.scene.stations.filter((st) => st.plotId && !st.hustle.broken);
+    this.target = victims.length ? victims[Math.floor(Math.random() * victims.length)] : null;
+    const spot = this.target?.spot ?? this.scene.plots[Math.floor(Math.random() * this.scene.plots.length)];
+    const y = this.target ? spot.y : spot.y + 72;
+    this.path = findPath(this.scene.navGrid, this.x, this.y, spot.x, y) ?? [];
+  }
+
+  contain() {
+    this.state = 'quarantined';
+    this.quarantine = this.rogueCfg.quarantineSeconds;
+    this.target = null;
+    this.path = null;
+    this.catchProgress = 0;
+    this.float('Contained!', '#5ff0ff');
+    this.scene.events.emit('agent-contained', this);
+  }
+
   // ---------- Drawing ----------
 
   render(dt) {
@@ -297,7 +410,14 @@ export class Agent {
     const frames = this.cfg.frames;
     let frame = frames.front;
     let flip = false;
-    if (sleeping) frame = frames.sleep[Math.floor(this.t / 0.7) % frames.sleep.length];
+    const rogue = this.state === 'rogue';
+    const sideways = Math.abs(this.vx) > Math.abs(this.vy) * 0.6;
+    if (rogue) {
+      const moving = this.path?.length > 0;
+      frame = moving && sideways ? frames.rogueSide : frames.rogueFront;
+      flip = moving && sideways && this.vx < 0;
+    } else if (this.state === 'quarantined') frame = frames.front;
+    else if (sleeping) frame = frames.sleep[Math.floor(this.t / 0.7) % frames.sleep.length];
     else if (this.state === 'drowsy') frame = frames.drowsy;
     else if (this.state === 'working') frame = frames.side;
     else if (this.state === 'moving' && Math.abs(this.vx) > Math.abs(this.vy) * 0.6) {
@@ -306,6 +426,9 @@ export class Agent {
     }
     if (this.sprite.frame.name !== frame) this.sprite.setFrame(frame);
     this.sprite.setFlipX(flip);
+    if (this.state === 'quarantined') this.sprite.setTint(0x7dd3fc);
+    else this.sprite.clearTint();
+    this.shadow.fillColor = rogue ? 0xdc2626 : 0x000000;
 
     // Cash he's carrying, stacked over his head.
     const headY = top - this.sprite.displayHeight + (sleeping ? 42 : 0); // sleeping frames are shorter
@@ -317,14 +440,44 @@ export class Agent {
     // ⚡ while he waits for you to fix the power; a nap timer while asleep.
     const waiting = gameState.tripped && (this.state === 'idle' || this.goal?.kind === 'park');
     this.bubble.setVisible(waiting).setPosition(this.x + 24, headY - 2).setDepth(12450);
-    this.label.setVisible(sleeping);
-    if (sleeping) {
+    this.renderRogue(top, headY);
+    this.label.setVisible(sleeping || rogue || this.state === 'quarantined');
+    if (rogue) {
+      const text = this.catchProgress > 0 ? `Containing ${Math.floor(this.catchProgress * 100)}%` : 'ROGUE! Catch him';
+      this.label.setText(text).setColor(this.catchProgress > 0 ? '#5ff0ff' : '#fca5a5').setPosition(this.x, headY - 6).setDepth(12450);
+    } else if (this.state === 'quarantined') {
+      this.label.setText(`Quarantined ${Math.ceil(this.quarantine)}s`).setColor('#7dd3fc').setPosition(this.x, headY - 6).setDepth(12450);
+    } else if (sleeping) {
+      this.label.setColor('#c4b5fd');
       this.label.setText(`Resetting credits ${Math.ceil(this.nap)}s`).setPosition(this.x, headY - 22).setDepth(12450);
       this.zTimer -= dt;
       if (this.zTimer <= 0) {
         this.zTimer = 0.9;
         this.floatZ(headY);
       }
+    }
+  }
+
+  // A ring that fills while you contain him; a containment field while quarantined.
+  renderRogue(top, headY) {
+    const g = this.ring;
+    g.clear();
+    if (this.state === 'rogue') {
+      g.lineStyle(3, 0xf87171, 0.5 + 0.3 * Math.sin(this.t * 8));
+      g.strokeEllipse(this.x, this.y, this.rogueCfg.catchRange * 1.6, this.rogueCfg.catchRange * 0.7);
+      if (this.catchProgress > 0) {
+        g.lineStyle(5, 0x5ff0ff, 1);
+        g.beginPath();
+        g.arc(this.x, top - this.sprite.displayHeight / 2, 46, -Math.PI / 2, -Math.PI / 2 + this.catchProgress * Math.PI * 2);
+        g.strokePath();
+      }
+    } else if (this.state === 'quarantined') {
+      const w = this.sprite.displayWidth + 16;
+      const h = top - headY + 16;
+      g.fillStyle(0x38bdf8, 0.12);
+      g.fillRoundedRect(this.x - w / 2, headY - 8, w, h, 8);
+      g.lineStyle(2, 0x7dd3fc, 0.7 + 0.2 * Math.sin(this.t * 3));
+      g.strokeRoundedRect(this.x - w / 2, headY - 8, w, h, 8);
     }
   }
 
@@ -343,7 +496,7 @@ export class Agent {
   }
 
   destroy() {
-    for (const o of [this.shadow, this.sprite, this.bubble, this.label, ...this.stack]) o.destroy();
+    for (const o of [this.shadow, this.sprite, this.bubble, this.label, this.ring, ...this.stack]) o.destroy();
     this.stack = [];
   }
 }
