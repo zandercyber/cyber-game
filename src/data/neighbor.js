@@ -20,7 +20,7 @@ export const NEIGHBOR = {
   calmPerSecond: 0.25, // patience regained per second while everything is silent (out of 100)
   nightMultiplier: 2, // quiet hours (10 PM to 6 AM, see clock.js): noise wears out patience this many times faster
   warnAt: 50, // they bang on the wall at this much annoyance (halfway to a visit)
-  comingSeconds: 15, // time to switch everything off while they knock on the window
+  comingSeconds: 10, // time to switch everything off while they knock on the window
   checkSeconds: 8, // they look in the window this long when it's quiet
   caughtSeconds: 20, // ...and this long when they caught something running
   fines: [50, 100, 200, 400, 800], // per complaint; the last one repeats
