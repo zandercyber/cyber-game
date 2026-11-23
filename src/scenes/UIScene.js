@@ -173,8 +173,15 @@ export class UIScene extends Phaser.Scene {
     else if (neighbor.state === 'visiting') text = 'Neighbor at the window: stay quiet';
     else if (rogue) text = `${rogue.name} went rogue: catch him!`;
     else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
-    else if (boxes.length) text = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
-    else if (carryBox) text = Object.hasOwn(POWER_ITEMS, carryBox.itemId) ? 'Take the box to the breaker panel' : 'Carry the box to an empty plot';
+    else if (carryBox) {
+      if (Object.hasOwn(POWER_ITEMS, carryBox.itemId)) text = 'Take the box to the breaker panel';
+      else text = this.dorm.hasEmptyPlot ? 'Carry the box to an empty plot' : 'No empty plot: bring the box back to the door';
+    }
+    else if (boxes.length) {
+      const waiting = boxes.length === 1 ? 'A box is waiting at the door' : `${boxes.length} boxes at the door`;
+      const stuck = !this.dorm.hasEmptyPlot && boxes.every((b) => !Object.hasOwn(POWER_ITEMS, b.itemId));
+      text = stuck ? `${waiting}: dig up a machine to make room` : waiting;
+    }
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;
     else if (this.dorm.arrivals.length) {
       const next = this.dorm.arrivals.reduce((a, b) => (b.remaining < a.remaining ? b : a));
