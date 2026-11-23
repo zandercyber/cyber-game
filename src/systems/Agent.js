@@ -2,6 +2,8 @@
 // Agents float around the room on a cloud and, every time they finish
 // something, pick the first thing on this list:
 //   1. Out of energy (types that nap): stash any cash held, then nap ("resetting credits").
+//      After the nap he stays asleep until you walk up to wake him, so the dorm
+//      can't keep earning on its own while you're away.
 //   2. Holding cash: carry it to the hamper.
 //   3. A cash pile at least half full: go scoop it up.
 //   4. The best-paying machine he can use: go work it until it overheats or its
@@ -25,14 +27,15 @@ const HOVER = 16; // how far his cloud floats above the floor
 const FONT = 'system-ui, sans-serif';
 const PARK = { x: 240, y: 610 }; // where agents hover when there's nothing to do (side by side)
 const LOAD_GRACE = 5; // seconds after loading before a rogue agent can fry anything
+const WAKE_RANGE = 80; // walk this close to a sleeping agent (whose nap is over) to wake him
 
 export class Agent {
   /**
    * scene: the DormScene (stations, navGrid, player). type: a key of AGENT_TYPES.
-   * levels: that type's shop upgrade levels. awake / nap / carried: restored from a save.
+   * levels: that type's shop upgrade levels. awake / nap / asleep / carried: restored from a save.
    */
   constructor(scene, {
-    type, name, x, y, levels, awake = null, nap = 0, carried = 0, arriving = false, rogue = false, rogueIn = null, quarantine = 0,
+    type, name, x, y, levels, awake = null, nap = 0, asleep = false, carried = 0, arriving = false, rogue = false, rogueIn = null, quarantine = 0,
   }) {
     this.scene = scene;
     this.type = type;
@@ -45,7 +48,7 @@ export class Agent {
     this.awake = awake ?? this.stats.awakeSeconds;
     this.nap = nap;
     this.carried = carried;
-    this.state = nap > 0 ? 'sleeping' : 'idle';
+    this.state = nap > 0 || (asleep && this.cfg.naps) ? 'sleeping' : 'idle';
     this.goal = null; // { kind: 'work' | 'collect' | 'stash' | 'park', station? }
     this.path = null;
     this.station = null; // the machine he's working
@@ -106,6 +109,7 @@ export class Agent {
   get status() {
     if (this.state === 'rogue') return 'ROGUE! Frying machines. Catch him!';
     if (this.state === 'quarantined') return `Quarantined: ${Math.ceil(this.quarantine)}s`;
+    if (this.waitingToWake) return 'Asleep: walk up to wake him';
     if (this.state === 'sleeping') return `Napping to reset credits: ${Math.ceil(this.nap)}s`;
     if (this.state === 'drowsy') return 'Getting sleepy…';
     if (this.state === 'working') return `Working: ${this.machineName(this.station)}`;
@@ -133,12 +137,15 @@ export class Agent {
         this.float('Back to work', '#5ff0ff');
       }
     } else if (this.state === 'sleeping') {
-      this.nap -= dt;
-      if (this.nap <= 0) {
-        this.nap = 0;
+      // Napping can't be cut short; once it's over he waits for you to come wake him.
+      if (this.nap > 0) {
+        this.nap = Math.max(0, this.nap - dt);
+        if (this.nap === 0) this.scene.events.emit('agent-waiting', this);
+      } else if (this.playerNear(WAKE_RANGE)) {
         this.awake = this.stats.awakeSeconds;
         this.state = 'idle';
         this.float('Credits reset!', '#c4b5fd');
+        this.scene.events.emit('agent-woken', this);
       }
     } else if (this.state === 'drowsy') {
       this.drowsyFor -= dt;
@@ -247,6 +254,16 @@ export class Agent {
       return;
     }
     this.goTo('park', null, x, PARK.y);
+  }
+
+  /** Asleep with the nap over: he waits for you to walk up and wake him. */
+  get waitingToWake() {
+    return this.state === 'sleeping' && this.nap <= 0;
+  }
+
+  playerNear(range) {
+    const p = this.scene.player;
+    return Math.hypot(p.x - this.x, p.y - this.y) < range;
   }
 
   fallAsleep() {
@@ -448,8 +465,9 @@ export class Agent {
     } else if (this.state === 'quarantined') {
       this.label.setText(`Quarantined ${Math.ceil(this.quarantine)}s`).setColor('#7dd3fc').setPosition(this.x, headY - 6).setDepth(12450);
     } else if (sleeping) {
-      this.label.setColor('#c4b5fd');
-      this.label.setText(`Resetting credits ${Math.ceil(this.nap)}s`).setPosition(this.x, headY - 22).setDepth(12450);
+      const text = this.nap > 0 ? `Resetting credits ${Math.ceil(this.nap)}s` : 'Walk up to wake him';
+      this.label.setColor(this.nap > 0 ? '#c4b5fd' : '#fde68a');
+      this.label.setText(text).setPosition(this.x, headY - 22).setDepth(12450);
       this.zTimer -= dt;
       if (this.zTimer <= 0) {
         this.zTimer = 0.9;

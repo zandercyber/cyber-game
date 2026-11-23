@@ -128,6 +128,7 @@ export function readSave({ plotIds, pileMax }) {
       ...rogue,
       awake: num(a.awake, 0, maxAwake, maxAwake),
       nap: num(a.nap, 0, cfg.napSeconds ?? 0),
+      asleep: a.asleep === true && Boolean(cfg.naps), // nap over, waiting for you to wake him
       carried: int(a.carried, 0, MAX_CASH),
       // Checked against the room by the scene before it's used.
       position: Number.isFinite(a.x) && Number.isFinite(a.y) ? { x: a.x, y: a.y } : null,

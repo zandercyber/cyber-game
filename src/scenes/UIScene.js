@@ -176,11 +176,13 @@ export class UIScene extends Phaser.Scene {
     let text = '';
     const rogue = this.dorm.agents.find((a) => a.state === 'rogue');
     const neighbor = this.dorm.neighbor;
+    const sleeper = this.dorm.agents.find((ag) => ag.waitingToWake);
     const stillOn = this.dorm.runningMachines().length;
     if (neighbor.state === 'coming') text = stillOn ? `Switch machines off! ${stillOn} still on · ${Math.ceil(neighbor.timer)}s` : `All off. Neighbor in ${Math.ceil(neighbor.timer)}s`;
     else if (neighbor.state === 'visiting') text = 'Neighbor at the window: stay quiet';
     else if (rogue) text = `${rogue.name} went rogue: catch him!`;
     else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
+    else if (sleeper) text = `${sleeper.name} is asleep: walk up to wake him`;
     else if (carryBox) {
       if (Object.hasOwn(POWER_ITEMS, carryBox.itemId)) text = 'Take the box to the breaker panel';
       else if (Object.hasOwn(FOAM_ITEMS, carryBox.itemId)) text = 'Take the foam panels to the bed';
