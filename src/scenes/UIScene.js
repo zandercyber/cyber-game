@@ -177,11 +177,16 @@ export class UIScene extends Phaser.Scene {
     const rogue = this.dorm.agents.find((a) => a.state === 'rogue');
     const neighbor = this.dorm.neighbor;
     const sleeper = this.dorm.agents.find((ag) => ag.waitingToWake);
+    const crashed = this.dorm.crashedStations;
+    const updates = this.dorm.pendingUpdates;
+    const outdated = updates.filter((st) => st.hustle.outdated);
+    const nameOf = (st) => this.dorm.itemName(this.dorm.plots.find((p) => p.id === st.plotId)?.itemId);
     const stillOn = this.dorm.runningMachines().length;
     if (neighbor.state === 'coming') text = stillOn ? `Switch machines off! ${stillOn} still on · ${Math.ceil(neighbor.timer)}s` : `All off. Neighbor in ${Math.ceil(neighbor.timer)}s`;
     else if (neighbor.state === 'visiting') text = 'Neighbor at the window: stay quiet';
     else if (rogue) text = `${rogue.name} went rogue: catch him!`;
     else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
+    else if (crashed.length && !gameState.tripped) text = crashed.length === 1 ? `${nameOf(crashed[0])} crashed: stand at it to reboot` : `${crashed.length} servers crashed: reboot them`;
     else if (sleeper) text = `${sleeper.name} is asleep: walk up to wake him`;
     else if (carryBox) {
       if (Object.hasOwn(POWER_ITEMS, carryBox.itemId)) text = 'Take the box to the breaker panel';
@@ -193,6 +198,8 @@ export class UIScene extends Phaser.Scene {
       const stuck = !this.dorm.hasEmptyPlot && boxes.every((b) => Object.hasOwn(ITEMS, b.itemId));
       text = stuck ? `${waiting}: dig up a machine to make room` : waiting;
     }
+    else if (outdated.length) text = outdated.length === 1 ? `${nameOf(outdated[0])} is outdated (pays less): update it` : `${outdated.length} machines outdated (pay less): update them`;
+    else if (updates.length) text = updates.length === 1 ? `Update available on the ${nameOf(updates[0])}` : `${updates.length} updates available: stand at those machines`;
     else if (orders.length) text = `Delivery in ${Math.ceil(Math.min(...orders.map((o) => o.remaining)))}s`;
     else if (this.dorm.arrivals.length) {
       const next = this.dorm.arrivals.reduce((a, b) => (b.remaining < a.remaining ? b : a));

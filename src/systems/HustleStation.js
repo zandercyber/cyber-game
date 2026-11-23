@@ -10,14 +10,26 @@
 // - It can be switched off (to keep the neighbor happy): no work, no noise.
 // - A power surge can fry it. A fried machine smokes and earns nothing until
 //   you stand at it (with the power on) to repair it.
+// - Servers (crashes) can crash when they finish a job, more often when hot.
+//   Crashed works like fried (stand at it to reboot), with a blue tint instead of smoke.
+// - PCs (updates) get an update every few minutes: stand at it to install. Ignored
+//   for a minute, the machine is outdated and pays less. Helpers don't install updates.
+//   Numbers in src/data/maintenance.js.
+
+import { CRASH, UPDATES, nextUpdateIn } from '../data/maintenance.js';
 
 const BAR_W = 170;
 const FONT = 'system-ui, sans-serif';
-const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee', quiz: '#0e7490ee' };
+const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee', quiz: '#0e7490ee', crash: '#1e3a8aee', update: '#1d4ed8ee' };
 const REPAIR_SECONDS = 3;
+const CRASH_TINT = 0x7aa2f7; // blue-screen blue
+const UPDATE_COLOR = 0x60a5fa;
 
 export class HustleStation {
-  constructor(scene, { panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1, sprite = null, group = null }) {
+  constructor(scene, {
+    panelX, panelY, screen, pile, hustles, heat, pileMax, idle = false, payMultiplier = 1, sprite = null, group = null,
+    crashes = false, updates = false,
+  }) {
     this.scene = scene;
     this.hustles = hustles;
     this.heatCfg = heat; // null = this machine doesn't heat up
@@ -27,7 +39,14 @@ export class HustleStation {
     this.enabled = true; // the corner desk switches off when it becomes the shop
     this.powered = true; // false while the breaker is tripped
     this.sprite = sprite; // the machine's picture (darkened while fried)
-    this.broken = false; // fried by a power surge
+    this.broken = false; // fried by a power surge, or crashed (see brokenKind)
+    this.brokenKind = 'fried'; // 'fried' | 'crashed'
+    this.crashes = crashes; // servers: can crash when they finish a job
+    this.updates = updates; // PCs: get updates to install
+    this.updateIn = updates ? nextUpdateIn() : null; // seconds until the next update
+    this.updateDue = false; // an update is waiting to be installed
+    this.updateAge = 0; // seconds since it became due (outdated after UPDATES.graceSeconds)
+    this.installProgress = 0;
     this.switchedOff = false; // switched off for the neighbor
     this.group = group; // which security questions it asks ('helpdesk' | 'web' | 'ai')
     this.awaiting = null; // a finished job waiting on your answer: { bonus }
@@ -103,6 +122,15 @@ export class HustleStation {
       return false;
     }
     if (this.broken) return this.updateBroken(dt, { canWork: canWork && !helper, near, handsFull });
+    if (this.updates && this.powered && !this.switchedOff) {
+      if (this.updateDue) this.updateAge += dt;
+      else {
+        this.updateIn -= dt;
+        if (this.updateIn <= 0) this.setUpdateDue(true);
+      }
+      // You standing here installs the update first (helpers just keep working).
+      if (this.updateDue && canWork && !helper && !this.awaiting) return this.updateInstall(dt, { near, handsFull });
+    }
     if (this.switchedOff) {
       this.working = false;
       if (h) {
@@ -169,33 +197,83 @@ export class HustleStation {
     }
     this.working = this.powered && canWork;
     if (this.working) {
-      this.repairProgress += dt / REPAIR_SECONDS;
+      this.repairProgress += dt / (this.brokenKind === 'crashed' ? CRASH.rebootSeconds : REPAIR_SECONDS);
       if (this.repairProgress >= 1) this.setBroken(false);
     }
     this.render(dt, { near, handsFull });
     return this.working;
   }
 
-  /** Fries or repairs the machine. quiet: no effects (used when loading a save). */
-  setBroken(on, { quiet = false } = {}) {
+  /**
+   * Fries/crashes or repairs the machine. kind: 'fried' (power surge) or 'crashed' (server crash).
+   * quiet: no effects (used when loading a save).
+   */
+  setBroken(on, { quiet = false, kind = 'fried' } = {}) {
+    const crashed = (on ? kind : this.brokenKind) === 'crashed';
     this.broken = on;
+    if (on) this.brokenKind = kind;
     this.repairProgress = 0;
     this.working = false;
     if (on) {
       this.progress = 0; // the job it was doing is lost
-      this.sprite?.setTint(0x6b6b6b);
-      if (!quiet) this.floatText('FRIED!', this.panel.x, this.panel.y - 40, '#f87171');
+      this.sprite?.setTint(crashed ? CRASH_TINT : 0x6b6b6b);
+      if (!quiet) this.floatText(crashed ? 'CRASHED!' : 'FRIED!', this.panel.x, this.panel.y - 40, crashed ? '#93c5fd' : '#f87171');
     } else {
       if (this.switchedOff) this.sprite?.setTint(0x9ca3af);
       else this.sprite?.clearTint();
       if (!quiet) {
-        this.floatText('Fixed!', this.panel.x, this.panel.y - 40, '#4ade80');
+        this.floatText(crashed ? 'Rebooted!' : 'Fixed!', this.panel.x, this.panel.y - 40, '#4ade80');
         this.scene.events.emit('machine-repaired');
       }
     }
   }
 
+  get crashed() {
+    return this.broken && this.brokenKind === 'crashed';
+  }
+
+  /** Ignored an update too long: pays less until you install it. */
+  get outdated() {
+    return this.updateDue && this.updateAge >= UPDATES.graceSeconds;
+  }
+
+  /** An update shows up (or is installed). quiet: no effects (used when loading a save). */
+  setUpdateDue(on, { quiet = false } = {}) {
+    this.updateDue = on;
+    this.updateAge = 0;
+    this.installProgress = 0;
+    if (!on) this.updateIn = nextUpdateIn();
+    if (quiet) return;
+    if (on) {
+      this.floatText('Update available', this.panel.x, this.panel.y - 40, '#93c5fd');
+      this.scene.events.emit('machine-update', this);
+    } else {
+      this.floatText('Updated!', this.panel.x, this.panel.y - 40, '#4ade80');
+      this.scene.events.emit('machine-updated', this);
+    }
+  }
+
+  // Installing an update: you stand here; no job progress, it just cools.
+  updateInstall(dt, { near, handsFull }) {
+    const h = this.heatCfg;
+    if (h) {
+      this.heat = Math.max(0, this.heat - (this.overheated ? h.perSecondCooling : h.idleCooling) * dt);
+      if (this.heat === 0) this.overheated = false;
+    }
+    this.working = true;
+    this.installProgress += dt / UPDATES.installSeconds;
+    if (this.installProgress >= 1) this.setUpdateDue(false);
+    this.render(dt, { near, handsFull });
+    return true;
+  }
+
   finishJob(bonus = 1, helper = false) {
+    // Servers can crash instead of finishing, more likely when hot. The job is lost.
+    if (this.crashes && Math.random() < CRASH.chance + CRASH.hotChance * (this.heat / 100)) {
+      this.setBroken(true, { kind: 'crashed' });
+      this.scene.events.emit('machine-crashed', this);
+      return;
+    }
     if (!helper && this.group && this.scene.askQuestion?.(this)) {
       this.awaiting = { bonus };
       this.working = false;
@@ -229,7 +307,8 @@ export class HustleStation {
   }
 
   payJob(bonus = 1) {
-    const pay = Math.round(this.job.pay * this.payMultiplier * bonus);
+    const outdated = this.outdated ? UPDATES.outdatedPay : 1;
+    const pay = Math.round(this.job.pay * this.payMultiplier * bonus * outdated);
     this.pile = Math.min(this.pileMax, this.pile + pay);
     this.progress = 0;
     this.job = this.pickJob();
@@ -253,11 +332,15 @@ export class HustleStation {
   }
 
   render(dt, { near, handsFull }) {
-    this.panel.setVisible(near || this.broken || this.switchedOff || (this.overheated && this.powered) || this.helperWorking);
+    this.panel.setVisible(near || this.broken || this.switchedOff || (this.overheated && this.powered) || this.helperWorking || this.updateDue);
     // Job titles only when you're close, or for something that needs you.
-    this.title.setVisible(near || this.broken || this.switchedOff || Boolean(this.awaiting) || this.overheated || !this.powered);
-    this.progressFill.width = Math.min(1, this.broken ? this.repairProgress : this.progress) * BAR_W;
-    this.progressFill.fillColor = this.broken ? 0xf97316 : 0x5ff0ff;
+    this.title.setVisible(near || this.broken || this.switchedOff || Boolean(this.awaiting) || this.overheated || !this.powered || this.updateDue);
+    const installing = this.updateDue && this.installProgress > 0;
+    let bar = this.progress;
+    if (this.broken) bar = this.repairProgress;
+    else if (installing) bar = this.installProgress;
+    this.progressFill.width = Math.min(1, bar) * BAR_W;
+    this.progressFill.fillColor = this.crashed || installing ? UPDATE_COLOR : this.broken ? 0xf97316 : 0x5ff0ff;
     if (this.heatCfg) {
       this.heatFill.width = (this.heat / 100) * BAR_W;
       this.heatFill.fillColor = this.overheated || this.heat > 80 ? 0xef4444 : this.heat > 50 ? 0xf97316 : 0xf59e0b;
@@ -271,6 +354,13 @@ export class HustleStation {
     } else if (this.switchedOff && !this.broken) {
       text = 'OFF';
       bg = '#334155ee';
+    } else if (this.crashed) {
+      if (!near) text = 'CRASHED';
+      else if (!this.powered) text = 'Crashed! Reset the breaker first';
+      else if (this.repairProgress > 0) text = `Rebooting… ${Math.floor(this.repairProgress * 100)}%`;
+      else if (handsFull) text = 'Crashed! Free your hands to reboot';
+      else text = 'Crashed! Stand here to reboot';
+      bg = STATUS_COLORS.crash;
     } else if (this.broken) {
       if (!near) text = 'FRIED'; // short from afar, so several fried machines don't clutter the room
       else if (!this.powered) text = 'Fried! Reset the breaker first';
@@ -281,6 +371,13 @@ export class HustleStation {
     } else if (!this.powered) {
       text = 'No power: reset the breaker';
       bg = STATUS_COLORS.hot;
+    } else if (this.updateDue) {
+      const pct = `-${Math.round((1 - UPDATES.outdatedPay) * 100)}% pay`;
+      if (!near) text = this.outdated ? `OUTDATED (${pct})` : 'UPDATE';
+      else if (installing) text = `Installing update… ${Math.floor(this.installProgress * 100)}%`;
+      else if (handsFull) text = 'Update: free your hands to install';
+      else text = this.outdated ? `Outdated (${pct}): stand here to update` : 'Update available: stand here to install';
+      bg = STATUS_COLORS.update;
     } else if (this.overheated) {
       text = `Overheated! Cooling down… ${Math.ceil(this.heat / this.heatCfg.perSecondCooling)}s`;
       bg = STATUS_COLORS.hot;
@@ -305,8 +402,8 @@ export class HustleStation {
     } else if (this.glow) {
       this.glow.setAlpha(0);
     }
-    // Fried: dark smoke.
-    if (this.broken) {
+    // Fried: dark smoke. (Crashed machines just sit there with a blue tint.)
+    if (this.broken && !this.crashed) {
       this.steamTimer -= dt;
       if (this.steamTimer <= 0) {
         this.steamTimer = 0.25;

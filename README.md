@@ -14,6 +14,8 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **Foam panels:** order them in the shop's Gear tab (3 levels, one at a time) and carry the box to the bed. They go up on the wall above it, and each level makes noise bother your neighbor 10% less, so they come over a little less often.
 
+**Repairs:** servers (the server rack, and the GPU rig) sometimes **crash** when they finish a job, more often when they're running hot: stand at a crashed server for 3 seconds to reboot it. PCs (the laptops and the workstation) get an **update** every few minutes: stand at the machine for 3 seconds to install it. Ignore it for a minute and the machine is **outdated** and pays 25% less until you update it. Agents never fix anything: that's your job.
+
 **Security checks:** about 1 in 5 jobs you finish yourself pops up a cybersecurity question that matches the machine (help desk, web bugs, or AI security). Right answer: double pay. Wrong or too slow (15 s): the job fails. Every answer shows a one-line explanation, and you won't see a repeat until you've seen the whole set.
 
 **AI agents** (the shop's **Agents** tab): run up to 2, any mix (the dorm is small). **Augustus** rides a cloud, works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for a minute to "reset credits" when his energy runs out. After that he stays asleep until you walk up and wake him. The first costs $300 and each extra Augustus costs double the last. Upgrades (speed, profit, energy) apply to every agent of that type.
@@ -48,7 +50,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **L** the neighbor comes over now, **Q** a security question on every job, **T** skip ahead 2 hours on the clock, **F** put up the next level of foam panels now.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **L** the neighbor comes over now, **Q** a security question on every job, **T** skip ahead 2 hours on the clock, **F** put up the next level of foam panels now, **C** crash a server now, **V** an update on every PC now.
 
 ## Project structure
 
