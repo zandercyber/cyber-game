@@ -1070,7 +1070,7 @@ export class DormScene extends Phaser.Scene {
       boxes: this.boxes.map((b) => b.itemId),
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y), facing: this.player.facing },
       agents: this.agents.map((a) => ({
-        type: a.type, awake: Math.round(a.awake), nap: Math.ceil(a.nap), carried: a.carried, x: Math.round(a.x), y: Math.round(a.y),
+        type: a.type, awake: Math.round(a.awake), nap: Math.ceil(a.nap), asleep: a.state === 'sleeping', carried: a.carried, x: Math.round(a.x), y: Math.round(a.y),
         ...(a.rogueCfg ? { rogue: a.state === 'rogue', rogueIn: Math.round(a.rogueIn), quarantine: Math.ceil(a.quarantine) } : {}),
       })),
       arrivals: this.arrivals.map((a) => ({ type: a.type, remaining: Math.ceil(a.remaining) })),
@@ -1137,7 +1137,7 @@ export class DormScene extends Phaser.Scene {
       const ok = a.position && this.player.canStandAt(a.position.x, a.position.y);
       const pos = ok ? a.position : { x: DORM.deliverySpot.x, y: DORM.deliverySpot.y + 20 };
       this.spawnAgent(a.type, {
-        ...pos, awake: a.awake, nap: a.nap, carried: a.carried, rogue: a.rogue, rogueIn: a.rogueIn, quarantine: a.quarantine,
+        ...pos, awake: a.awake, nap: a.nap, asleep: a.asleep, carried: a.carried, rogue: a.rogue, rogueIn: a.rogueIn, quarantine: a.quarantine,
       });
     }
     this.arrivals = save.arrivals.map((a) => ({ ...a }));
