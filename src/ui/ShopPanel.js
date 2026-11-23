@@ -1,11 +1,11 @@
 // The shop screen: opens when you stand at the corner laptop (after it unlocks).
 // Three tabs:
 //   Gear: machines plus the next power upgrade and foam panels; orders arrive later as a box at the door.
-//   Agents: hire AI agents (up to 3, any mix) and upgrade each type. Pick a type with the chips.
+//   Agents: hire AI agents (up to MAX_AGENTS, any mix) and upgrade each type. Pick a type with the chips.
 //   You: your own upgrades (carry limit, speed).
 
 import { ITEMS, FOAM_MAX_LEVEL, FOAM_QUIET_PER_LEVEL, orderable } from '../data/catalog.js';
-import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX } from '../data/agents.js';
+import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS } from '../data/agents.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
 
@@ -118,7 +118,7 @@ export class ShopPanel {
     for (const b of this.tabButtons) this.styleButton(b, b.id === tab);
     this.subtitle.setText({
       gear: 'Orders arrive as a box at the door. Carry it to where it goes.',
-      agents: 'Hire up to 3 agents, any mix. Upgrades apply to every agent of that type.',
+      agents: `Hire up to ${MAX_AGENTS} agents, any mix. Upgrades apply to every agent of that type.`,
       you: 'Upgrades take effect right away.',
     }[tab]);
     this.refresh();
@@ -298,7 +298,7 @@ export class ShopPanel {
       hire.name.setText(t.owned + t.coming ? `Hire another ${cfg.name}` : `Hire ${cfg.name}`);
       let line = cfg.blurb;
       if (t.coming) line = `On the way: floats in through the door in ${Math.ceil(t.nextArrival)}s`;
-      else if (full) line = 'You have 3 agents, the most the dorm can run.';
+      else if (full) line = `You have ${info.max} agents, the most the dorm can run.`;
       hire.info.setText(line);
       this.setButton(hire, full ? 'Full' : `$${t.nextPrice}`, !full && gameState.cash >= t.nextPrice);
       // Upgrades show once you have one of this type.

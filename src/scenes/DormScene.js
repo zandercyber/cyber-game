@@ -180,6 +180,7 @@ export class DormScene extends Phaser.Scene {
 
     this.addHint();
     this.scene.launch('UIScene');
+    if (this.agentsSentHome) this.time.delayedCall(1200, () => this.events.emit('agents-sent-home', this.agentsSentHome));
     this.updatePowerUsage();
     if (DEBUG) this.setupDebug();
   }
@@ -1124,6 +1125,11 @@ export class DormScene extends Phaser.Scene {
     this.neighbor.restore(save.neighbor);
     this.applyPlayerStats();
     this.agentLevels = save.agentLevels;
+    // Older saves could have 3 agents; the extra one went home and its price comes back.
+    if (save.agentsSentHome.refund > 0) {
+      gameState.addCash(save.agentsSentHome.refund);
+      this.agentsSentHome = save.agentsSentHome;
+    }
     for (const a of save.agents) {
       const ok = a.position && this.player.canStandAt(a.position.x, a.position.y);
       const pos = ok ? a.position : { x: DORM.deliverySpot.x, y: DORM.deliverySpot.y + 20 };

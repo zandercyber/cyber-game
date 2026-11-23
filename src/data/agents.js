@@ -5,7 +5,7 @@
 import { AUGUSTUS, AUGUSTUS_UPGRADES, augustusStats } from './augustus.js';
 import { NERO, NERO_UPGRADES, neroStats } from './nero.js';
 
-export const MAX_AGENTS = 3;
+export const MAX_AGENTS = 2; // the dorm is small (was 3; older saves with more are refunded on load)
 export const AGENT_LEVEL_MAX = 5;
 
 export const AGENT_TYPES = {

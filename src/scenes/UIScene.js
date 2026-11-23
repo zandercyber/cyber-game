@@ -1,7 +1,7 @@
 // Heads-up display drawn on top of the room: cash, power meter, shop, buttons.
 import * as Phaser from 'phaser';
 import { ITEMS, POWER_ITEMS, POWER_TIERS, FOAM_ITEMS, FOAM_QUIET_PER_LEVEL, SHOVEL_REFUND } from '../data/catalog.js';
-import { AGENT_TYPES } from '../data/agents.js';
+import { AGENT_TYPES, MAX_AGENTS } from '../data/agents.js';
 import { NEIGHBOR, noiseLevel } from '../data/neighbor.js';
 import { PLAYER_UPGRADES } from '../data/playerUpgrades.js';
 import { gameState } from '../state/GameState.js';
@@ -144,6 +144,9 @@ export class UIScene extends Phaser.Scene {
     this.dorm.events.on('agent-arrived', onArrive);
     this.dorm.events.on('agent-upgraded', onUpgrade);
     this.dorm.events.on('player-upgraded', onPlayerUpgrade);
+    const onSentHome = ({ names, refund }) => this.showBanner(`The dorm fits ${MAX_AGENTS} agents now`,
+      `${names.join(' and ')} went home. You got back the $${refund.toLocaleString()} you paid.`, PURPLE);
+    this.dorm.events.once('agents-sent-home', onSentHome);
 
     this.renderCash(gameState.cash);
     this.renderPower(gameState.power);
@@ -156,6 +159,7 @@ export class UIScene extends Phaser.Scene {
       this.dorm.events.off('shop', onShop);
       this.dorm.events.off('breaker-tripped', onTrip);
       this.dorm.events.off('power-installed', onPower);
+      this.dorm.events.off('agents-sent-home', onSentHome);
       this.dorm.events.off('foam-installed', onFoam);
       this.dorm.events.off('agent-arrived', onArrive);
       this.dorm.events.off('agent-rogue', onRogue);
