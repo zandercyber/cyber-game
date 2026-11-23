@@ -53,6 +53,15 @@ export class UIScene extends Phaser.Scene {
     this.noiseText = this.add.text(px + 140 + NEIGHBOR_BAR_W + 12, 113, '', { fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: '#e6f4ff' })
       .setOrigin(0, 0.5).setVisible(false);
 
+    // Clock, next to the cash: time of day, day number, quiet hours at night.
+    this.panel(250, 18, 180, 64);
+    this.clockIcon = this.add.graphics();
+    this.clockText = this.add.text(300, 38, '', { fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#e6f4ff' })
+      .setOrigin(0, 0.5);
+    this.clockDay = this.add.text(300, 64, '', { fontFamily: FONT, fontSize: '13px', fontStyle: 'bold', color: '#94a3b8' })
+      .setOrigin(0, 0.5);
+    this.clockNight = null;
+
     this.addFullscreenButton(width, height);
     this.addNewGameButton(height);
     this.dorm = this.scene.get('DormScene');
@@ -121,7 +130,10 @@ export class UIScene extends Phaser.Scene {
     const onComplaint = ({ fine, paid, next }) => this.showBanner(`Noise complaint! -$${paid}`, `${paid < fine ? `You couldn't cover the $${fine} fine. ` : ''}The next complaint costs $${next}.`, RED);
     const onSatisfied = () => this.showBanner('Quiet enough', 'Your neighbor grumbles and heads back home.', GREEN);
     const onLeft = () => { if (this.dorm.switchedOffCount) this.showBanner('They\'re gone', 'Walk up to your machines to switch them back on.', 0x5ff0ff); };
-    const neighborEvents = { 'neighbor-warning': onWarn, 'neighbor-coming': onComing, 'neighbor-complaint': onComplaint, 'neighbor-satisfied': onSatisfied, 'neighbor-left': onLeft };
+    const PURPLE = 0xa78bfa;
+    const onNight = () => this.showBanner('Quiet hours', `10 PM to 6 AM: your neighbor is trying to sleep, so noise bothers them ${NEIGHBOR.nightMultiplier}x as fast.`, PURPLE);
+    const onMorning = () => this.showBanner('Good morning', 'Quiet hours are over. Your neighbor is back to normal.', AMBER);
+    const neighborEvents = { 'night-start': onNight, 'night-end': onMorning, 'neighbor-warning': onWarn, 'neighbor-coming': onComing, 'neighbor-complaint': onComplaint, 'neighbor-satisfied': onSatisfied, 'neighbor-left': onLeft };
     for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.on(name, fn);
     this.events.once('shutdown', () => { for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.off(name, fn); });
     this.dorm.events.on('agent-rogue', onRogue);
@@ -280,6 +292,28 @@ export class UIScene extends Phaser.Scene {
     this.shovelText.setVisible(on);
   }
 
+  // Time of day: a sun or moon, the time, and the day number.
+  renderClock() {
+    const clock = this.dorm.clock;
+    if (this.clockText.text !== clock.label) this.clockText.setText(clock.label);
+    const day = clock.night ? `Day ${clock.day} · Quiet hours` : `Day ${clock.day}`;
+    if (this.clockDay.text !== day) this.clockDay.setText(day).setColor(clock.night ? '#c4b5fd' : '#94a3b8');
+    if (this.clockNight === clock.night) return;
+    this.clockNight = clock.night;
+    const g = this.clockIcon.clear();
+    if (clock.night) { // crescent moon: a pale circle with a panel-colored bite
+      g.fillStyle(0xfef3c7, 1).fillCircle(276, 50, 12);
+      g.fillStyle(PANEL_BG, 1).fillCircle(282, 45, 10);
+    } else { // sun with short rays
+      g.lineStyle(3, 0xfcd34d, 1);
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        g.lineBetween(276 + Math.cos(a) * 13, 50 + Math.sin(a) * 13, 276 + Math.cos(a) * 17, 50 + Math.sin(a) * 17);
+      }
+      g.fillStyle(0xfcd34d, 1).fillCircle(276, 50, 9);
+    }
+  }
+
   // How close the neighbor is to coming over, and how loud you are (louder = sooner).
   renderNeighbor() {
     const n = this.dorm.neighbor;
@@ -293,7 +327,9 @@ export class UIScene extends Phaser.Scene {
     let label = 'NEIGHBOR';
     if (n.state === 'coming') label = 'COMING OVER';
     else if (n.state === 'visiting') label = 'AT THE WINDOW';
-    if (this.neighborLabel.text !== label) this.neighborLabel.setText(label).setColor(n.quiet ? '#fca5a5' : '#cbd5e1');
+    else if (this.dorm.clock.night) label = 'QUIET HOURS';
+    const labelColor = n.quiet ? '#fca5a5' : label === 'QUIET HOURS' ? '#c4b5fd' : '#cbd5e1';
+    if (this.neighborLabel.text !== label) this.neighborLabel.setText(label).setColor(labelColor);
     const loudness = noiseLevel(noise);
     const text = loudness ? `Noise: ${loudness.name}` : 'Silent';
     if (this.noiseText.text !== text) this.noiseText.setText(text).setColor(loudness ? loudness.color : '#94a3b8');
@@ -302,6 +338,7 @@ export class UIScene extends Phaser.Scene {
   update() {
     this.questionPanel.update();
     this.renderNeighbor();
+    this.renderClock();
     const plot = this.dorm.shovelTarget?.() ?? null;
     if (plot !== this.shovelPlot) {
       this.shovelPlot = plot;

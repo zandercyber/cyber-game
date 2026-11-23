@@ -44,6 +44,11 @@ export class Neighbor {
     }).setOrigin(0.5).setDepth(12600).setVisible(false);
   }
 
+  /** How much faster than usual noise wears out his patience right now (night = quiet hours). */
+  get sensitivity() {
+    return this.scene.clock?.night ? NEIGHBOR.nightMultiplier : 1;
+  }
+
   /** True while you're supposed to be quiet (he's knocking or at the window). */
   get quiet() {
     return this.state === 'coming' || this.state === 'visiting';
@@ -52,9 +57,10 @@ export class Neighbor {
   /** noise: what your machines are making right now. */
   update(dt, noise) {
     if (this.state === 'calm') {
-      // Louder = patience runs out sooner (NOISE_LEVELS); silence slowly earns it back.
+      // Louder = patience runs out sooner (NOISE_LEVELS), twice as fast during quiet hours;
+      // silence slowly earns it back.
       const level = noiseLevel(noise);
-      const change = level ? 100 / level.visitEvery : -NEIGHBOR.calmPerSecond;
+      const change = level ? (100 / level.visitEvery) * this.sensitivity : -NEIGHBOR.calmPerSecond;
       this.annoyance = Math.min(100, Math.max(0, this.annoyance + change * dt));
       if (this.annoyance >= NEIGHBOR.warnAt && !this.warned) this.bangOnWall();
       if (this.annoyance < NEIGHBOR.warnAt - 20) this.warned = false;
@@ -89,6 +95,7 @@ export class Neighbor {
     this.knockTimer = 0.6; // first knock once he's up at the glass
     this.countdown.setVisible(true);
     this.showWindow(true);
+    this.sky.setTexture((this.scene.clock?.darkness ?? 0) >= 0.5 ? 'window-sky-night' : 'window-sky');
     // He steps up into view from below the sill.
     const s = this.scene;
     s.tweens.killTweensOf(this.figure);
