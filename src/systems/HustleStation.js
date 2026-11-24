@@ -17,6 +17,7 @@
 //   Numbers in src/data/maintenance.js.
 
 import { CRASH, UPDATES, nextUpdateIn } from '../data/maintenance.js';
+import { FAN } from '../data/catalog.js';
 
 const BAR_W = 170;
 const FONT = 'system-ui, sans-serif';
@@ -32,7 +33,8 @@ export class HustleStation {
   }) {
     this.scene = scene;
     this.hustles = hustles;
-    this.heatCfg = heat; // null = this machine doesn't heat up
+    this.baseHeat = heat; // null = this machine doesn't heat up (see the heatCfg getter for fans)
+    this.fan = false; // a box fan clipped on: heats slower, cools faster
     this.pileMax = pileMax;
     this.idle = idle;
     this.payMultiplier = payMultiplier;
@@ -104,6 +106,17 @@ export class HustleStation {
 
   get pileFull() {
     return this.pile >= this.pileMax;
+  }
+
+  /** Heat rates for this machine right now: a fan heats it slower and cools it faster. */
+  get heatCfg() {
+    const h = this.baseHeat;
+    if (!h || !this.fan) return h;
+    return {
+      perSecondWorking: h.perSecondWorking * FAN.heatSlower,
+      perSecondCooling: h.perSecondCooling * FAN.coolFaster,
+      idleCooling: h.idleCooling * FAN.coolFaster,
+    };
   }
 
   /**

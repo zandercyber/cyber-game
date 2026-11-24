@@ -92,12 +92,24 @@ export const FOAM_LEVELS = [
 export const FOAM_MAX_LEVEL = FOAM_LEVELS.length;
 export const FOAM_ITEMS = Object.fromEntries(FOAM_LEVELS.map((f) => [f.id, f]));
 
-/** Anything you can order: a machine (ITEMS), a power upgrade (POWER_ITEMS) or foam (FOAM_ITEMS). null if unknown. */
+// A box fan that clips onto one machine (one fan per machine): it heats up 40% slower
+// and cools down 50% faster, but adds 1 noise while that machine is being worked.
+// Bought in the shop's Room tab; carry the box to a machine. Draws 20 W.
+export const FAN = {
+  id: 'fan', name: 'Box fan', price: 100, watts: 20, deliverySeconds: 20, icon: 'item-fan',
+  heatSlower: 0.6, // heat builds at this rate (40% slower)
+  coolFaster: 1.5, // cools 50% faster
+  noise: 1, // extra noise while its machine is worked
+};
+export const FAN_ITEMS = { fan: FAN };
+
+/** Anything you can order: a machine (ITEMS), a power upgrade (POWER_ITEMS), foam (FOAM_ITEMS) or a fan. null if unknown. */
 export function orderable(id) {
   if (typeof id !== 'string') return null;
   if (Object.hasOwn(ITEMS, id)) return ITEMS[id];
   if (Object.hasOwn(POWER_ITEMS, id)) return POWER_ITEMS[id];
   if (Object.hasOwn(FOAM_ITEMS, id)) return FOAM_ITEMS[id];
+  if (Object.hasOwn(FAN_ITEMS, id)) return FAN_ITEMS[id];
   return null;
 }
 

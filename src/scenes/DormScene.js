@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { DORM } from '../data/dorm.js';
 import {
-  ITEMS, POWER_TIERS, POWER_ITEMS, FOAM_ITEMS, FOAM_LEVELS, FOAM_MAX_LEVEL, SMALL_IMAGES, SHOVEL_REFUND, STARTER_LAPTOP_WATTS, orderable,
+  ITEMS, POWER_TIERS, POWER_ITEMS, FOAM_ITEMS, FOAM_LEVELS, FOAM_MAX_LEVEL, FAN, FAN_ITEMS, SMALL_IMAGES, SHOVEL_REFUND, STARTER_LAPTOP_WATTS, orderable,
 } from '../data/catalog.js';
 import { makeWalkableCheck, translatePolygon, centerY, pointInPolygon } from '../systems/geometry.js';
 import { Joystick } from '../systems/Joystick.js';
@@ -47,6 +47,7 @@ const stepAt = (steps, t) => steps.reduce((value, [ms, alpha]) => (t >= ms ? alp
 const isPower = (id) => typeof id === 'string' && Object.hasOwn(POWER_ITEMS, id);
 const isFoam = (id) => typeof id === 'string' && Object.hasOwn(FOAM_ITEMS, id);
 const isMachine = (id) => typeof id === 'string' && Object.hasOwn(ITEMS, id); // goes on a plot
+const isFan = (id) => typeof id === 'string' && Object.hasOwn(FAN_ITEMS, id); // clips onto a machine
 
 export class DormScene extends Phaser.Scene {
   constructor() {
@@ -200,6 +201,7 @@ export class DormScene extends Phaser.Scene {
     this.updateBoxes();
     this.tryInstall();
     this.updateFoamSpot();
+    this.updateFans();
     this.updateBreaker(dt);
     this.updateLights();
     this.clock.update(dt);
@@ -297,7 +299,7 @@ export class DormScene extends Phaser.Scene {
     }
 
     // Machines being worked make noise; too much for too long brings the neighbor over.
-    this.noise = this.stations.reduce((sum, st) => sum + (st.hustle.working ? st.noise ?? 0 : 0), 0);
+    this.noise = this.stations.reduce((sum, st) => sum + (st.hustle.working ? (st.noise ?? 0) + (st.hustle.fan ? FAN.noise : 0) : 0), 0);
     this.neighbor.update(dt, this.noise);
     this.player.setWorking(working || this.resetting);
   }
@@ -519,6 +521,7 @@ export class DormScene extends Phaser.Scene {
     // Power and foam: only the next upgrade, one at a time.
     if (isPower(itemId) && (itemId !== this.nextPower()?.id || this.powerPending())) return false;
     if (isFoam(itemId) && (itemId !== this.nextFoam()?.id || this.foamPending())) return false;
+    if (isFan(itemId) && this.fansNeeded() <= 0) return false; // one fan per machine
     if (!gameState.spend(item.price)) return false;
     this.orders.push({ itemId, remaining: item.deliverySeconds });
     this.events.emit('order-placed', itemId);
@@ -580,6 +583,10 @@ export class DormScene extends Phaser.Scene {
         this.nudge('No empty plot: dig up a machine with the shovel first', box.x, box.y - 100);
         return;
       }
+      if (isFan(box.itemId) && !this.machinesWithoutFan().length) {
+        this.nudge('Every machine already has a fan', box.x, box.y - 100);
+        return;
+      }
       this.pickUpBox(box);
       return;
     }
@@ -607,7 +614,10 @@ export class DormScene extends Phaser.Scene {
     this.carryBox = { itemId: box.itemId, sprite: box.sprite };
     this.leftDoor = false;
     this.player.setCarrying(true);
-    const where = isPower(box.itemId) ? 'take it to the breaker' : isFoam(box.itemId) ? 'take it to the bed' : 'put it on an empty plot';
+    let where = 'put it on an empty plot';
+    if (isPower(box.itemId)) where = 'take it to the breaker';
+    else if (isFoam(box.itemId)) where = 'take it to the bed';
+    else if (isFan(box.itemId)) where = 'take it to a machine';
     this.floatText(`${orderable(box.itemId).name}: ${where}`, this.player.x, this.player.y - 140, '#5ff0ff');
   }
 
@@ -621,6 +631,11 @@ export class DormScene extends Phaser.Scene {
     }
     if (isFoam(this.carryBox.itemId)) {
       if (this.spotNear('foamWall')) this.installFoam();
+      return;
+    }
+    if (isFan(this.carryBox.itemId)) {
+      const st = this.stations.find((s) => s.plotId && s.near && !s.hustle.fan);
+      if (st) this.installFan(this.plots.find((p) => p.id === st.plotId));
       return;
     }
     const { width: w, height: h } = DORM.plotSize;
@@ -717,15 +732,16 @@ export class DormScene extends Phaser.Scene {
       this.stations.splice(this.stations.indexOf(plot.station), 1);
     }
     plot.sprite.destroy();
+    plot.fanSprite?.destroy();
     this.blocked.splice(this.blocked.indexOf(plot.footprint), 1);
-    Object.assign(plot, { itemId: null, sprite: null, footprint: null, station: null });
+    Object.assign(plot, { itemId: null, sprite: null, footprint: null, station: null, fan: false, fanSprite: null });
     plot.outline.setVisible(true);
     this.updatePowerUsage();
     return itemId;
   }
 
   updatePowerUsage() {
-    const watts = this.plots.reduce((sum, p) => sum + (p.itemId ? ITEMS[p.itemId].watts : 0), STARTER_LAPTOP_WATTS);
+    const watts = this.plots.reduce((sum, p) => sum + (p.itemId ? ITEMS[p.itemId].watts + (p.fan ? FAN.watts : 0) : 0), STARTER_LAPTOP_WATTS);
     gameState.setPowerUsed(watts);
   }
 
@@ -899,6 +915,56 @@ export class DormScene extends Phaser.Scene {
   }
 
   // Carrying a power box to the breaker panel installs the upgrade.
+  // ---------- Fans ----------
+
+  /** Installed machines that don't have a fan yet. */
+  machinesWithoutFan() {
+    return this.plots.filter((p) => p.station && !p.fan);
+  }
+
+  /** Fans ordered, waiting at the door or in your hands. */
+  fansPending() {
+    return [...this.orders.map((o) => o.itemId), ...this.boxes.map((b) => b.itemId), this.carryBox?.itemId].filter(isFan).length;
+  }
+
+  /** How many more fans you could use (one per machine, minus the ones on the way). */
+  fansNeeded() {
+    return this.machinesWithoutFan().length - this.fansPending();
+  }
+
+  installFan(plot, { quiet = false } = {}) {
+    if (!quiet) {
+      this.carryBox.sprite.destroy();
+      this.carryBox = null;
+      if (this.carried === 0) this.player.setCarrying(false);
+    }
+    plot.fan = true;
+    plot.station.hustle.fan = true;
+    this.drawFan(plot);
+    this.updatePowerUsage();
+    if (quiet) return;
+    this.floatText('Fan on!', plot.fanSprite.x, plot.fanSprite.y - 80, '#4ade80');
+    this.tweens.add({ targets: plot.fanSprite, scale: { from: 0.4, to: 1 }, duration: 300, ease: 'Back.out' });
+    this.events.emit('fan-installed', this.itemName(plot.itemId));
+  }
+
+  // The fan stands on the floor just left of its machine (clear of it, whatever its width).
+  drawFan(plot) {
+    plot.fanSprite?.destroy();
+    const x = plot.x - plot.sprite.width / 2 - 18;
+    const y = plot.y + 34;
+    plot.fanSprite = this.add.image(x, y, 'item-fan').setOrigin(0.5, 1).setDepth(y);
+  }
+
+  // A fan wobbles a little while its machine is being worked.
+  updateFans() {
+    for (const p of this.plots) {
+      if (!p.fanSprite) continue;
+      const on = p.station?.hustle.working;
+      p.fanSprite.setAngle(on ? Math.sin(this.time.now / 45) * 1.5 : 0);
+    }
+  }
+
   // ---------- Foam panels ----------
 
   nextFoam() {
@@ -1001,9 +1067,10 @@ export class DormScene extends Phaser.Scene {
     const plot = this.plots.find((p) => p.id === plotId);
     if (!plot?.itemId || this.carryBox) return false;
     const top = plot.sprite.y - plot.sprite.height;
+    const hadFan = plot.fan;
     const itemId = this.removeItem(plotId);
     this.rebuildNavigation();
-    const refund = Math.round(ITEMS[itemId].price * SHOVEL_REFUND);
+    const refund = Math.round((ITEMS[itemId].price + (hadFan ? FAN.price : 0)) * SHOVEL_REFUND); // its fan comes off too
     this.carried += refund;
     if (this.carried > 0) this.player.setCarrying(true);
     this.rebuildCarryStack();
@@ -1099,17 +1166,18 @@ export class DormScene extends Phaser.Scene {
   stationState(station) {
     const h = station.hustle;
     return {
-      pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken, crashed: h.crashed, off: h.switchedOff,
+      pile: h.pile, heat: Math.round(h.heat), overheated: h.overheated, broken: h.broken, crashed: h.crashed, off: h.switchedOff, fan: h.fan,
       ...(h.updates ? { updateIn: Math.round(h.updateIn), updateDue: h.updateDue, updateAge: Math.round(h.updateAge) } : {}),
     };
   }
 
   restoreStation(station, state) {
     if (!station || !state) return;
-    const { broken, crashed, off, updateIn, updateDue, updateAge, ...rest } = state;
+    const { broken, crashed, off, updateIn, updateDue, updateAge, fan, ...rest } = state;
     const h = station.hustle;
     Object.assign(h, rest);
     if (broken && station.plotId) h.setBroken(true, { quiet: true, kind: crashed && h.crashes ? 'crashed' : 'fried' });
+    if (fan && station.plotId) this.installFan(this.plots.find((p) => p.id === station.plotId), { quiet: true });
     if (h.updates && updateIn !== null) {
       h.updateIn = updateIn;
       if (updateDue) {
@@ -1343,7 +1411,7 @@ export class DormScene extends Phaser.Scene {
   // Keys: B fill empty plots, R remove everything, M +$100, P next power supply,
   // U unlock the shop, D deliver all orders now, G hire an Augustus now, N hire a Nero now, X Nero goes rogue now, L the neighbor comes over now, Q questions on every job,
   // T skip ahead 2 hours on the clock, F put up the next level of foam panels now,
-  // C crash a server now, V an update on every PC now.
+  // C crash a server now, V an update on every PC now, K a fan on every machine now.
   setupDebug() {
     this.debugGfx = this.add.graphics().setDepth(15000);
     this.debugFeet = this.add.circle(this.player.x, this.player.y, 5, 0xffff00).setDepth(15001);
@@ -1371,6 +1439,9 @@ export class DormScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-C', () => { // crash a server now
       const st = this.stations.find((s) => s.hustle.crashes && !s.hustle.broken);
       if (st) st.hustle.setBroken(true, { kind: 'crashed' });
+    });
+    this.input.keyboard.on('keydown-K', () => { // a fan on every machine now
+      for (const p of this.machinesWithoutFan()) this.installFan(p, { quiet: true });
     });
     this.input.keyboard.on('keydown-V', () => { // an update on every PC now
       for (const s of this.stations) if (s.hustle.updates && !s.hustle.updateDue && !s.hustle.broken) s.hustle.setUpdateDue(true);

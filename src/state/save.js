@@ -71,6 +71,7 @@ export function readSave({ plotIds, pileMax }) {
       pile: int(v.pile, 0, max), heat: num(v.heat, 0, 100), overheated: v.overheated === true, broken: v.broken === true, off: v.off === true,
       // Maintenance (src/data/maintenance.js): crashed servers, PC updates. Missing = fresh.
       crashed: v.crashed === true,
+      fan: v.fan === true, // a box fan clipped on
       updateIn: Number.isFinite(v.updateIn) ? num(v.updateIn, 0, UPDATES.every[1]) : null,
       updateDue: v.updateDue === true,
       updateAge: num(v.updateAge, 0, UPDATES.graceSeconds * 100),
