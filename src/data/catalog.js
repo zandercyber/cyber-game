@@ -43,7 +43,7 @@ export const ITEMS = {
   'server-rack': {
     name: 'Server rack',
     file: 'stations/server-rack.png',
-    price: 900,
+    price: 1500, // balance pass (Nov 23): was 900
     watts: 900,
     noise: 4, // while being worked (see neighbor.js)
     deliverySeconds: 120,
@@ -54,13 +54,13 @@ export const ITEMS = {
   'gpu-rig': {
     name: 'GPU rig',
     file: 'stations/gpu-rig.png', // Zander's Gemini art, resampled to a 108x104 grid and drawn at 2x
-    price: 2500,
+    price: 6000, // balance pass (Nov 23): was 2,500
     watts: 1500, // needs the battery backup (UPS) or better
     noise: 5, // while being worked (see neighbor.js)
     deliverySeconds: 150,
     footprint: [[-92, -56], [-32, -14], [92, -80], [31, -120]], // pulled in a little at the front so paths to the work spot clear its corner
-    // Best pay in the dorm (~20 $/s while worked), but it runs hot. Agents go for it first.
-    earns: { mode: 'work', jobs: 'training', payMultiplier: 7, heat: 'gpu', pileMax: 500 },
+    // Best pay in the dorm (~17 $/s while worked), but it runs hot. Agents go for it first.
+    earns: { mode: 'work', jobs: 'training', payMultiplier: 6, heat: 'gpu', pileMax: 500 },
   },
 };
 
@@ -71,10 +71,10 @@ export const POWER_TIERS = [
   { id: 'wall-outlet', name: 'Wall outlet', capacity: 500, price: 0, deliverySeconds: 0, icon: null },
   { id: 'power-strip', name: 'Power strip', capacity: 900, price: 60, deliverySeconds: 10, icon: 'item-power-strip' },
   { id: 'surge-protector', name: 'Surge protector', capacity: 1500, price: 200, deliverySeconds: 20, icon: 'item-surge-protector' },
-  { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 600, deliverySeconds: 40, icon: 'item-ups' },
-  { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 1500, deliverySeconds: 60, icon: 'item-dedicated-circuit' },
+  { id: 'ups', name: 'Battery backup (UPS)', capacity: 2200, price: 1200, deliverySeconds: 40, icon: 'item-ups' },
+  { id: 'dedicated-circuit', name: 'Dedicated circuit', capacity: 3500, price: 4000, deliverySeconds: 60, icon: 'item-dedicated-circuit' },
   // Room for two GPU rigs.
-  { id: 'sub-panel', name: 'Electrical sub-panel', capacity: 5000, price: 4000, deliverySeconds: 90, icon: 'item-sub-panel' },
+  { id: 'sub-panel', name: 'Electrical sub-panel', capacity: 5000, price: 10000, deliverySeconds: 90, icon: 'item-sub-panel' },
 ];
 
 // Power upgrades by id (everything after the starting wall outlet), with their tier number.
@@ -85,9 +85,9 @@ export const POWER_ITEMS = Object.fromEntries(POWER_TIERS.slice(1).map((t, i) =>
 // come over a little less often. The box goes to the bed (DORM.foamWall).
 export const FOAM_QUIET_PER_LEVEL = 0.1;
 export const FOAM_LEVELS = [
-  { id: 'foam-1', name: 'Foam panels', level: 1, price: 150, deliverySeconds: 20 },
-  { id: 'foam-2', name: 'More foam panels', level: 2, price: 300, deliverySeconds: 30 },
-  { id: 'foam-3', name: 'Full foam wall', level: 3, price: 600, deliverySeconds: 40 },
+  { id: 'foam-1', name: 'Foam panels', level: 1, price: 300, deliverySeconds: 20 },
+  { id: 'foam-2', name: 'More foam panels', level: 2, price: 900, deliverySeconds: 30 },
+  { id: 'foam-3', name: 'Full foam wall', level: 3, price: 2400, deliverySeconds: 40 },
 ];
 export const FOAM_MAX_LEVEL = FOAM_LEVELS.length;
 export const FOAM_ITEMS = Object.fromEntries(FOAM_LEVELS.map((f) => [f.id, f]));

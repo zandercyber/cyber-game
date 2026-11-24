@@ -8,29 +8,29 @@ export const AUGUSTUS = {
   arriveSeconds: 6, // after hiring, he floats in through the door this much later
   moveSpeed: 150, // world pixels per second (you move at 240)
   workRate: 0.5, // how fast he finishes jobs compared with you (you: 1x, up to 2x with Work speed)
-  awakeSeconds: 90, // energy: time awake before he needs a nap
-  napSeconds: 60, // the nap itself ("resetting credits")
+  awakeSeconds: 120, // energy: time awake before he needs a nap (was 90; he now waits for you to wake him)
+  napSeconds: 45, // the nap itself ("resetting credits"; was 60)
   drowsySeconds: 2, // eyes closing before he falls asleep
   collectAt: 0.5, // he goes for a cash pile once it's this full
   scale: 3, // sprite sheet is drawn at 3x (20x26 frames)
 };
 
-// Shop upgrades. Each has 5 levels; the price doubles every level.
+// Shop upgrades. Each has 5 levels; prices climb about 2.5x per level (balance pass, Nov 23).
 export const MAX_LEVEL = 5;
 export const AUGUSTUS_UPGRADES = {
   speed: {
     name: 'Augustus speed',
-    prices: [100, 200, 400, 800, 1600],
+    prices: [100, 250, 600, 1500, 3500],
     describe: (lvl) => `Floats ${15 * lvl}% faster, works ${12 * lvl}% faster`,
   },
   profit: {
     name: 'Augustus profit',
-    prices: [150, 300, 600, 1200, 2400],
+    prices: [150, 400, 1000, 2500, 6000],
     describe: (lvl) => `+${15 * lvl}% pay on jobs he does`,
   },
   energy: {
     name: 'Augustus energy',
-    prices: [100, 200, 400, 800, 1600],
+    prices: [100, 250, 600, 1500, 3500],
     describe: (lvl) => `Awake ${AUGUSTUS.awakeSeconds + 30 * lvl}s between naps`,
   },
 };
