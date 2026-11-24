@@ -5,7 +5,7 @@
 // All numbers are first guesses to tune.
 
 export const NERO = {
-  hirePrice: 6000, // doubles for each extra Nero (balance pass: was 2,500)
+  hirePrice: 3000, // doubles for each extra Nero (one-hour pass: was 6,000)
   arriveSeconds: 8,
   moveSpeed: 190, // world pixels per second (you move at 240)
   workRate: 0.8, // job speed compared with you (you: 1x, up to 2x with Work speed)
@@ -25,17 +25,17 @@ export const NERO = {
 export const NERO_UPGRADES = {
   speed: {
     name: 'Nero speed',
-    prices: [800, 2000, 5000, 12000, 30000],
+    prices: [400, 900, 2000, 4500, 10000],
     describe: (lvl) => `Floats ${15 * lvl}% faster, works ${12 * lvl}% faster`,
   },
   profit: {
     name: 'Nero profit',
-    prices: [1000, 2500, 6000, 15000, 35000],
+    prices: [500, 1100, 2500, 5500, 12000],
     describe: (lvl) => `+${50 + 15 * lvl}% pay on jobs he does`,
   },
   stability: {
     name: 'Nero stability',
-    prices: [600, 1500, 4000, 10000, 25000],
+    prices: [300, 700, 1500, 3500, 8000],
     describe: (lvl) => (lvl === 0 ? 'Goes rogue about every 5 minutes' : `Goes rogue ${Math.round(100 - 100 / (1 + 0.25 * lvl))}% less often`),
   },
 };
