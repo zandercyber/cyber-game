@@ -1,13 +1,15 @@
 // The shop screen: opens when you stand at the corner laptop (after it unlocks).
-// Three tabs:
+// Five tabs:
 //   Machines (tab id 'gear'): machines; orders arrive later as a box at the door.
 //   Room: the next power upgrade, foam panels and box fans (each box goes where it's used).
+//   Security: security tools against cyber attacks (email filter, MFA, phishing training). Software: works right away.
 //   Agents: hire AI agents (up to MAX_AGENTS, any mix) and upgrade each type. Pick a type with the chips.
 //   You: your own upgrades (carry limit, walking speed, work speed).
 
 import { ITEMS, FOAM_MAX_LEVEL, FOAM_QUIET_PER_LEVEL, FAN, orderable } from '../data/catalog.js';
 import { AGENT_TYPES, AGENT_TYPE_IDS, AGENT_LEVEL_MAX, MAX_AGENTS } from '../data/agents.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
+import { SECURITY_UPGRADES, SECURITY_UPGRADE_IDS, securityMax } from '../data/security.js';
 import { gameState } from '../state/GameState.js';
 
 // Hacker-terminal look: green on black, monospace, scanlines, a blinking cursor.
@@ -30,8 +32,11 @@ const ROW_H = 84;
 const HEADER_H = 100; // prompt line, tabs, comment line
 const CHIPS_H = 40; // the agent-type picker at the top of the Agents tab
 const TEXT_W = W - 90 - 122; // leave room for the price button (monospace text is wide)
-const TAB_CMD = { gear: './shop --tab=machines', room: './shop --tab=room', agents: './shop --tab=agents', you: './shop --tab=you' };
+const TAB_CMD = {
+  gear: './shop --tab=machines', room: './shop --tab=room', security: './shop --tab=security', agents: './shop --tab=agents', you: './shop --tab=you',
+};
 
+const SECURITY_THUMBS = { filter: ['icon-filter'], mfa: ['icon-key'], training: ['icon-training'] };
 const PLAYER_THUMBS = { carry: ['item-cash', undefined, 1.3], speed: ['player', 0, 1.1], work: ['player', 36, 1.1] }; // 36 = working (back view)
 const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 
@@ -45,8 +50,10 @@ function agentThumb(type, kind) {
 export class ShopPanel {
   constructor(scene, callbacks) {
     this.scene = scene;
-    // onBuy, getOrders, getPower, getFoam, getFans, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade
+    // onBuy, getOrders, getPower, getFoam, getFans, getAgents, onHire, onAgentUpgrade, getPlayerLevels, onPlayerUpgrade,
+    // getSecurity, onSecurityUpgrade
     Object.assign(this, callbacks);
+    makeSecurityIcons(scene);
     const ids = Object.keys(ITEMS);
     const rowCount = Math.max(ids.length, 5); // the tallest tab (machines; agents need about 5 rows too)
     this.height = HEADER_H + rowCount * ROW_H + 56;
@@ -63,10 +70,9 @@ export class ShopPanel {
     this.cursor = scene.add.text(16, 10, '█', { fontFamily: FONT, fontSize: '17px', color: T.text });
     this.subtitle = scene.add.text(16, 76, '', { fontFamily: FONT, fontSize: '13px', color: T.dim, wordWrap: { width: W - 32 } });
     this.root.add([this.prompt, this.cursor, this.subtitle]);
-    const tabW = (W - 32 - 3 * 8) / 4;
-    this.tabButtons = [
-      ['gear', 'machines'], ['room', 'room'], ['agents', 'agents'], ['you', 'you'],
-    ].map(([id, label], i) => this.addButton(16 + i * (tabW + 8), 38, tabW, 30, label, () => this.setTab(id), id));
+    const tabs = [['gear', 'machines'], ['room', 'room'], ['security', 'security'], ['agents', 'agents'], ['you', 'you']];
+    const tabW = (W - 32 - (tabs.length - 1) * 6) / tabs.length;
+    this.tabButtons = tabs.map(([id, label], i) => this.addButton(16 + i * (tabW + 6), 38, tabW, 30, label, () => this.setTab(id), id));
 
     // Machines tab.
     this.rows = ids.map((id, i) => this.addRow(HEADER_H + i * ROW_H, { tab: 'gear', id, thumb: [`station-${id}`] }));
@@ -98,6 +104,15 @@ export class ShopPanel {
     this.rosterText = scene.add.text(20, top + 4 * ROW_H + 10, '', {
       fontFamily: FONT, fontSize: '13px', color: T.dim, lineSpacing: 3, wordWrap: { width: W - 40 },
     });
+
+    // Security tab: one leveled row per tool, and what they've done for you so far.
+    this.securityRows = SECURITY_UPGRADE_IDS.map((key, i) =>
+      this.addRow(HEADER_H + i * ROW_H, { tab: 'security', action: `sec:${key}`, thumb: SECURITY_THUMBS[key] }));
+    this.rows.push(...this.securityRows);
+    this.securityText = scene.add.text(20, HEADER_H + SECURITY_UPGRADE_IDS.length * ROW_H + 12, '', {
+      fontFamily: FONT, fontSize: '13px', color: T.dim, lineSpacing: 4, wordWrap: { width: W - 40 },
+    });
+    this.root.add(this.securityText);
 
     // You tab.
     this.playerRows = PLAYER_UPGRADE_IDS.map((key, i) =>
@@ -166,6 +181,7 @@ export class ShopPanel {
     this.subtitle.setText('# ' + {
       gear: 'Machines come as a box. Carry it to an empty plot.',
       room: 'Room upgrades come as a box too. Carry it where it goes.',
+      security: 'Security tools are software: they work right away.',
       agents: `Up to ${MAX_AGENTS} agents, any mix. Upgrades apply to the type.`,
       you: 'Upgrades for you. They work right away.',
     }[tab]);
@@ -203,6 +219,7 @@ export class ShopPanel {
       let ok = false;
       if (row.action === 'hire') ok = this.onHire(row.agentType);
       else if (row.action?.startsWith('you:')) ok = this.onPlayerUpgrade(row.action.slice(4));
+      else if (row.action?.startsWith('sec:')) ok = this.onSecurityUpgrade(row.action.slice(4));
       else if (row.agentType) ok = this.onAgentUpgrade(row.agentType, row.action);
       else if (row.id) ok = this.onBuy(row.id);
       if (ok) {
@@ -311,6 +328,7 @@ export class ShopPanel {
     if (this.tab === 'gear') this.refreshGear();
     else if (this.tab === 'room') this.refreshRoom();
     else if (this.tab === 'agents') this.refreshAgents();
+    else if (this.tab === 'security') this.refreshSecurity();
     else this.refreshYou();
     // Only the current tab's rows are visible and tappable.
     for (const row of this.rows) {
@@ -332,10 +350,13 @@ export class ShopPanel {
     this.agentCount.setVisible(agents);
     this.rosterText.setVisible(agents);
     this.ordersText.setVisible(this.tab === 'gear' || this.tab === 'room');
+    this.securityText.setVisible(this.tab === 'security');
   }
 
   setButton(row, text, canBuy) {
-    if (this.scene.time.now < row.flashUntil) text = row.action === 'hire' ? 'Hired!' : row.action ? 'Upgraded!' : 'Ordered!';
+    if (this.scene.time.now < row.flashUntil) {
+      text = row.action === 'hire' ? 'Hired!' : row.action?.startsWith('sec:') ? 'Installed!' : row.action ? 'Upgraded!' : 'Ordered!';
+    }
     row.btn.setFillStyle(canBuy ? T.btnOn : T.btnOff);
     row.btn.setStrokeStyle(1, T.line, canBuy ? 0.8 : 0.25);
     row.label.setText(text).setFontSize(text.startsWith('$') ? 18 : 13);
@@ -452,6 +473,18 @@ export class ShopPanel {
     }
   }
 
+  refreshSecurity() {
+    const { levels, filtered, saved } = this.getSecurity();
+    for (const row of this.securityRows) {
+      const key = row.action.slice(4);
+      this.refreshLevelRow(row, SECURITY_UPGRADES[key], levels[key], securityMax(key));
+    }
+    const lines = ['# Phishing lands on your PCs: read emails before someone clicks.'];
+    if (filtered) lines.push(`Your filter stopped ${filtered} phishing email${filtered === 1 ? '' : 's'}.`);
+    if (saved) lines.push(`MFA kept $${saved.toLocaleString('en-US')} out of attackers' hands.`);
+    this.securityText.setText(lines.join('\n'));
+  }
+
   refreshYou() {
     const mine = this.getPlayerLevels();
     for (const row of this.playerRows) {
@@ -468,4 +501,50 @@ export class ShopPanel {
     const price = maxed ? null : upgrade.prices[level];
     this.setButton(row, maxed ? 'Max' : `$${price}`, !maxed && gameState.cash >= price);
   }
+}
+
+// Thumbnails for the Security tab, drawn once in code: a funnel (email filter),
+// a key (MFA) and a graduation cap (phishing training).
+function makeSecurityIcons(scene) {
+  if (scene.textures.exists('icon-filter')) return;
+  const draw = (key, paint) => {
+    const g = scene.make.graphics({ x: 0, y: 0 }, false);
+    paint(g);
+    g.generateTexture(key, 64, 64);
+    g.destroy();
+  };
+  draw('icon-filter', (g) => {
+    g.fillStyle(0x22d3ee, 1);
+    g.fillPoints([{ x: 6, y: 14 }, { x: 58, y: 14 }, { x: 38, y: 38 }, { x: 26, y: 38 }], true);
+    g.fillRect(26, 37, 12, 16);
+    g.fillStyle(0x0e7490, 1);
+    g.fillRect(6, 12, 52, 5);
+    g.fillStyle(0xf87171, 1); // a caught email, stuck at the top
+    g.fillRect(20, 2, 24, 12);
+    g.lineStyle(2, 0x7f1d1d, 1);
+    g.lineBetween(21, 3, 32, 9);
+    g.lineBetween(43, 3, 32, 9);
+    g.fillStyle(0xbbf7d0, 1); // a clean drop coming through
+    g.fillCircle(32, 59, 4);
+  });
+  draw('icon-key', (g) => {
+    g.lineStyle(7, 0xfbbf24, 1);
+    g.strokeCircle(20, 24, 12);
+    g.fillStyle(0xfbbf24, 1);
+    g.fillRect(29, 21, 30, 7);
+    g.fillRect(46, 27, 6, 12);
+    g.fillRect(54, 27, 5, 9);
+    g.fillStyle(0x4ade80, 1); // a little "verified" dot
+    g.fillCircle(12, 50, 7);
+  });
+  draw('icon-training', (g) => {
+    g.fillStyle(0xa78bfa, 1);
+    g.fillPoints([{ x: 32, y: 8 }, { x: 62, y: 22 }, { x: 32, y: 36 }, { x: 2, y: 22 }], true);
+    g.fillStyle(0x7c3aed, 1);
+    g.fillPoints([{ x: 14, y: 30 }, { x: 50, y: 30 }, { x: 50, y: 44 }, { x: 32, y: 52 }, { x: 14, y: 44 }], true);
+    g.lineStyle(3, 0xfbbf24, 1);
+    g.lineBetween(56, 25, 56, 46);
+    g.fillStyle(0xfbbf24, 1);
+    g.fillCircle(56, 48, 4);
+  });
 }

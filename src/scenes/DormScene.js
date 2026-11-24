@@ -26,6 +26,7 @@ import {
 } from '../data/agents.js';
 import { QUESTIONS, QUESTION_CHANCE, QUESTION_GROUPS, groupForJobs } from '../data/questions.js';
 import { PLAYER_UPGRADES, PLAYER_MAX_LEVEL, playerStats, noPlayerLevels } from '../data/playerUpgrades.js';
+import { SECURITY_UPGRADES, securityMax, noSecurityLevels } from '../data/security.js';
 
 const ACCENT = 0x5ff0ff;
 const FONT = 'system-ui, sans-serif';
@@ -138,6 +139,7 @@ export class DormScene extends Phaser.Scene {
     this.carried = 0;
     this.carryStack = [];
     this.playerLevels = noPlayerLevels(); // carry limit, walking speed and work speed, bought in the shop
+    this.securityLevels = noSecurityLevels(); // security tools (Security tab): email filter, MFA, phishing training
     this.workRate = 1; // your job speed (see applyPlayerStats)
     // How much cash you're holding, shown over your head.
     this.carryLabel = this.add.text(0, 0, '', {
@@ -360,6 +362,17 @@ export class DormScene extends Phaser.Scene {
     this.playerLevels = { ...this.playerLevels, [kind]: level + 1 };
     this.applyPlayerStats();
     this.events.emit('player-upgraded', kind, level + 1);
+    return true;
+  }
+
+  /** Called by the shop's Security tab: 'filter', 'mfa' or 'training'. Works right away. Returns true if it went through. */
+  buySecurityUpgrade(kind) {
+    const upgrade = Object.hasOwn(SECURITY_UPGRADES, kind) ? SECURITY_UPGRADES[kind] : null;
+    if (!upgrade) return false;
+    const level = this.securityLevels[kind];
+    if (level >= securityMax(kind) || !gameState.spend(upgrade.prices[level])) return false;
+    this.securityLevels = { ...this.securityLevels, [kind]: level + 1 };
+    this.events.emit('security-upgraded', kind, level + 1);
     return true;
   }
 
@@ -1170,6 +1183,7 @@ export class DormScene extends Phaser.Scene {
       agentLevels: this.agentLevels,
       questionsSeen: this.questionsSeen,
       playerLevels: this.playerLevels,
+      securityLevels: this.securityLevels,
       neighbor: this.neighbor.saveState,
       clock: this.clock.saveState,
       foamLevel: this.foamLevel,
@@ -1227,6 +1241,7 @@ export class DormScene extends Phaser.Scene {
     if (save.tripped) this.trip({ silent: true });
     this.questionsSeen = save.questionsSeen;
     this.playerLevels = { ...save.playerLevels };
+    this.securityLevels = { ...save.securityLevels };
     this.foamLevel = save.foamLevel;
     this.drawFoam();
     if (save.clock) this.clock.restore(save.clock); // before the neighbor, so a visit at night shows the night sky
