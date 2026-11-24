@@ -8,8 +8,8 @@
 // All numbers are first guesses to tune.
 
 export const CRASH = {
-  chance: 0.04, // per finished job when the machine is cool...
-  hotChance: 0.08, // ...plus up to this much more at full heat (12% total)
+  chance: 0.02, // per finished job when the machine is cool...
+  hotChance: 0.06, // ...plus up to this much more at full heat (8% total; balance pass: was 4% + 8%)
   rebootSeconds: 3, // stand at it this long to reboot
 };
 

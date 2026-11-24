@@ -1,5 +1,5 @@
-// Upgrades for you, bought in the shop's Upgrades tab. 5 levels each; the
-// price doubles every level. Numbers are first guesses to tune.
+// Upgrades for you, bought in the shop's You tab. 5 levels each; prices climb
+// about 2.5x per level (balance pass, Nov 23: tuned for ~2 hours to finish the dorm).
 
 export const PLAYER_MAX_LEVEL = 5;
 
@@ -10,17 +10,17 @@ const CARRY_LIMITS = [100, 150, 250, 400, 600, 1000];
 export const PLAYER_UPGRADES = {
   carry: {
     name: 'Carry limit',
-    prices: [100, 200, 400, 800, 1600],
+    prices: [100, 300, 800, 2000, 5000],
     describe: (lvl) => `Hold up to $${CARRY_LIMITS[lvl]} at once`,
   },
   speed: {
     name: 'Your speed',
-    prices: [100, 200, 400, 800, 1600],
+    prices: [100, 250, 600, 1500, 4000],
     describe: (lvl) => (lvl === 0 ? 'Normal walking speed' : `Walk ${10 * lvl}% faster`),
   },
   work: {
     name: 'Work speed',
-    prices: [150, 300, 600, 1200, 2400],
+    prices: [200, 500, 1200, 3000, 7500],
     describe: (lvl) => (lvl === 0 ? 'Finish jobs at normal speed' : `Finish jobs ${20 * lvl}% faster`),
   },
 };
