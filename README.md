@@ -12,7 +12,7 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **Day and night:** a clock next to your cash runs a full day every 10 minutes of play. From 10 PM to 6 AM it's night: the room gets darker and it's quiet hours, so your neighbor (trying to sleep) gets annoyed twice as fast.
 
-**Foam panels:** order them in the shop's Gear tab (3 levels, one at a time) and carry the box to the bed. They go up on the wall above it, and each level makes noise bother your neighbor 10% less, so they come over a little less often.
+**Foam panels:** order them in the shop's Room tab (3 levels, one at a time) and carry the box to the bed. They go up on the wall above it, and each level makes noise bother your neighbor 10% less, so they come over a little less often.
 
 **Repairs:** servers (the server rack, and the GPU rig) sometimes **crash** when they finish a job, more often when they're running hot: stand at a crashed server for 3 seconds to reboot it. PCs (the laptops and the workstation) get an **update** every few minutes: stand at the machine for 3 seconds to install it. Ignore it for a minute and the machine is **outdated** and pays 25% less until you update it. Agents never fix anything: that's your job.
 
@@ -22,7 +22,7 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **AI agents** (the shop's **Agents** tab): run up to 2, any mix (the dorm is small). **Augustus** rides a cloud, works your machines (slower than you, best-paying first), carries their cash to the hamper, and naps for 45 seconds to "reset credits" when his energy runs out. After that he stays asleep until you walk up and wake him. The first costs $300 and each extra Augustus costs double the last. Upgrades (speed, profit, energy) apply to every agent of that type.
 
-**Nero** ($6,000) is the high-risk, high-reward agent: he works at 80% of your speed for +50% pay and never naps, but about every 5 minutes he **goes rogue**, racing between machines and frying them. Stay right next to him for 3 seconds to contain him; he's quarantined for a minute, then goes back to work. His **stability** upgrade makes it happen less often.
+**Nero** ($3,000) is the high-risk, high-reward agent: he works at 80% of your speed for +50% pay and never naps, but about every 5 minutes he **goes rogue**, racing between machines and frying them. Stay right next to him for 3 seconds to contain him; he's quarantined for a minute, then goes back to work. His **stability** upgrade makes it happen less often.
 
 **Your upgrades** (the shop's **You** tab): **carry limit** (you start holding up to $100; bigger piles take more than one trip), **speed** (+10% walking per level) and **work speed** (finish jobs +20% faster per level, up to 2x; agents work slower than you: Augustus 0.5x, Nero 0.8x, a bit more with their upgrades). 5 levels each.
 

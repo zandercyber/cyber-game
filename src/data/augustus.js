@@ -15,22 +15,22 @@ export const AUGUSTUS = {
   scale: 3, // sprite sheet is drawn at 3x (20x26 frames)
 };
 
-// Shop upgrades. Each has 5 levels; prices climb about 2.5x per level (balance pass, Nov 23).
+// Shop upgrades. Each has 5 levels; prices climb about 2.2x per level (one-hour pass, Nov 24).
 export const MAX_LEVEL = 5;
 export const AUGUSTUS_UPGRADES = {
   speed: {
     name: 'Augustus speed',
-    prices: [100, 250, 600, 1500, 3500],
+    prices: [100, 200, 400, 900, 2000],
     describe: (lvl) => `Floats ${15 * lvl}% faster, works ${12 * lvl}% faster`,
   },
   profit: {
     name: 'Augustus profit',
-    prices: [150, 400, 1000, 2500, 6000],
+    prices: [150, 300, 700, 1500, 3000],
     describe: (lvl) => `+${15 * lvl}% pay on jobs he does`,
   },
   energy: {
     name: 'Augustus energy',
-    prices: [100, 250, 600, 1500, 3500],
+    prices: [100, 200, 400, 900, 2000],
     describe: (lvl) => `Awake ${AUGUSTUS.awakeSeconds + 30 * lvl}s between naps`,
   },
 };
