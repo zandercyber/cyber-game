@@ -18,6 +18,7 @@ import { readSave, writeSave } from '../state/save.js';
 import { Agent } from '../systems/Agent.js';
 import { Neighbor } from '../systems/Neighbor.js';
 import { Clock } from '../systems/Clock.js';
+import { Phishing } from '../systems/Phishing.js';
 import { SERVER_JOBS, PC_JOBS } from '../data/maintenance.js';
 import { CLOCK } from '../data/clock.js';
 import {
@@ -167,6 +168,9 @@ export class DormScene extends Phaser.Scene {
     this.neighbor = new Neighbor(this);
     this.noise = 0;
 
+    // Phishing emails on your PCs.
+    this.phishing = new Phishing(this);
+
     // Time of day: the room darkens at night (quiet hours).
     this.clock = new Clock(this);
     this.nightShade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x0a1030)
@@ -281,6 +285,10 @@ export class DormScene extends Phaser.Scene {
       }
     }
 
+    // Emails: standing still at a PC with one waiting opens it (and you stop working while you read).
+    this.phishing.update(dt, { at: still ? workTarget : null });
+    const reading = this.phishing.open ? this.phishing.station : null;
+
     // Machines Augustus (or another agent) is working this frame.
     const helpers = new Map(this.agents.filter((a) => a.workingStation).map((a) => [a.workingStation, a]));
     let working = false;
@@ -288,7 +296,7 @@ export class DormScene extends Phaser.Scene {
       const atThis = st === workTarget;
       const helper = atThis ? undefined : helpers.get(st);
       const busy = st.hustle.update(dt, {
-        canWork: (atThis && still && !this.handsFull) || Boolean(helper),
+        canWork: (atThis && still && !this.handsFull && st !== reading) || Boolean(helper),
         near: st.near,
         handsFull: atThis && this.handsFull,
         rate: helper ? helper.workRate : this.workRate, // you: 1x, faster with the Work speed upgrade
@@ -380,7 +388,7 @@ export class DormScene extends Phaser.Scene {
    * opens a question (true) and the job waits for your answer.
    */
   askQuestion(station) {
-    if (this.question || Math.random() >= this.questionChance) return false;
+    if (this.question || this.phishing.open || Math.random() >= this.questionChance) return false;
     const group = station.hustle?.group ?? station.group;
     const bank = QUESTIONS[group];
     if (!bank?.length) return false;
@@ -419,6 +427,11 @@ export class DormScene extends Phaser.Scene {
     const stillThere = this.stations.some((st) => st.hustle === q.hustle);
     const pay = stillThere ? q.hustle.resolveQuestion(correct) : 0;
     return { correct, pay };
+  }
+
+  /** Your response on an email card (see Phishing.js). */
+  answerPhish(pick) {
+    return this.phishing.answer(pick);
   }
 
   // ---------- AI agents (Augustus and friends) ----------
@@ -1160,6 +1173,7 @@ export class DormScene extends Phaser.Scene {
       neighbor: this.neighbor.saveState,
       clock: this.clock.saveState,
       foamLevel: this.foamLevel,
+      phishing: this.phishing.saveState,
     });
   }
 
@@ -1234,6 +1248,7 @@ export class DormScene extends Phaser.Scene {
     }
     this.arrivals = save.arrivals.map((a) => ({ ...a }));
     this.restoreStation(this.deskStation, save.desk);
+    this.phishing.restore(save.phishing);
     this.orders = save.orders.map((o) => ({ ...o }));
     for (const itemId of save.boxes) this.spawnBox(itemId);
 
@@ -1442,6 +1457,10 @@ export class DormScene extends Phaser.Scene {
     });
     this.input.keyboard.on('keydown-K', () => { // a fan on every machine now
       for (const p of this.machinesWithoutFan()) this.installFan(p, { quiet: true });
+    });
+    this.input.keyboard.on('keydown-E', () => { // an email on a PC now
+      const pcs = this.phishing.targets.filter((s) => !s.hustle.broken);
+      if (!this.phishing.station && pcs.length) this.phishing.start(pcs[Math.floor(Math.random() * pcs.length)]);
     });
     this.input.keyboard.on('keydown-V', () => { // an update on every PC now
       for (const s of this.stations) if (s.hustle.updates && !s.hustle.updateDue && !s.hustle.broken) s.hustle.setUpdateDue(true);

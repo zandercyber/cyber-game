@@ -11,6 +11,7 @@ import { QUESTIONS } from '../data/questions.js';
 import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js';
 import { CLOCK, MINUTES_PER_DAY } from '../data/clock.js';
 import { UPDATES } from '../data/maintenance.js';
+import { PHISHING, EMAILS } from '../data/phishing.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -173,6 +174,16 @@ export function readSave({ plotIds, pileMax }) {
     ? { day: int(c.day, 1, 100000, 1), minutes: num(c.minutes, 0, MINUTES_PER_DAY - 0.1, CLOCK.startHour * 60) }
     : null;
 
+  // Phishing: time to the next email, an email waiting on a PC (plot + which email), emails seen.
+  const p = obj(raw.phishing);
+  const phishing = Object.hasOwn(raw, 'phishing') ? {
+    nextIn: num(p.nextIn, 0, Math.max(PHISHING.firstAfter, PHISHING.every[1]), PHISHING.firstAfter),
+    plotId: typeof p.plotId === 'string' && plotIds.includes(p.plotId) ? p.plotId : null,
+    email: Number.isInteger(p.email) && p.email >= 0 && p.email < EMAILS.length ? p.email : null,
+    left: num(p.left, 0, PHISHING.reachSeconds),
+    seen: [...new Set((Array.isArray(p.seen) ? p.seen : []).filter((i) => Number.isInteger(i) && i >= 0 && i < EMAILS.length))],
+  } : null;
+
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
   const facing = ['down', 'left', 'right', 'up'].includes(player.facing) ? player.facing : 'down';
@@ -195,6 +206,7 @@ export function readSave({ plotIds, pileMax }) {
     neighbor,
     clock,
     foamLevel,
+    phishing,
     carried: int(raw.carried, 0, MAX_CASH),
     plots,
     desk: {
