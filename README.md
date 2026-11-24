@@ -16,7 +16,7 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **Repairs:** servers (the server rack, and the GPU rig) sometimes **crash** when they finish a job, more often when they're running hot: stand at a crashed server for 3 seconds to reboot it. PCs (the laptops and the workstation) get an **update** every few minutes: stand at the machine for 3 seconds to install it. Ignore it for a minute and the machine is **outdated** and pays 25% less until you update it. Agents never fix anything: that's your job.
 
-**Fans:** buy a box fan in the shop's **Room** tab and walk the box up to a machine to clip it on (one fan per machine, $100). That machine heats up 40% slower and cools down 50% faster, but it's a little louder while you work it (+1 noise) and the fan draws 20 W. The shop now has a **Machines** tab and a **Room** tab (power, foam panels, fans).
+**Fans:** buy a box fan in the shop's **Room** tab and walk the box up to a machine to clip it on (one fan per machine, $100). That machine heats up 40% slower and cools down 50% faster, but it's a little louder while you work it (+1 noise) and the fan draws 20 W. The shop is a green hacker terminal that powers on like an old CRT when you walk up to the laptop, with **machines**, **room** (power, foam panels, fans), **agents** and **you** tabs.
 
 **Security checks:** about 1 in 5 jobs you finish yourself pops up a cybersecurity question that matches the machine (help desk, web bugs, or AI security). Right answer: double pay. Wrong or too slow (15 s): the job fails. Every answer shows a one-line explanation, and you won't see a repeat until you've seen the whole set.
 
