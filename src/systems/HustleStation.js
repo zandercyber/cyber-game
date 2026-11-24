@@ -15,13 +15,14 @@
 // - PCs (updates) get an update every few minutes: stand at it to install. Ignored
 //   for a minute, the machine is outdated and pays less. Helpers don't install updates.
 //   Numbers in src/data/maintenance.js.
+// - PCs also get phishing emails (src/systems/Phishing.js sets `mail`); this only shows them.
 
 import { CRASH, UPDATES, nextUpdateIn } from '../data/maintenance.js';
 import { FAN } from '../data/catalog.js';
 
 const BAR_W = 170;
 const FONT = 'system-ui, sans-serif';
-const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee', quiz: '#0e7490ee', crash: '#1e3a8aee', update: '#1d4ed8ee' };
+const STATUS_COLORS = { job: '#0b0e14cc', hot: '#7f1d1dee', full: '#78350fee', quiz: '#0e7490ee', crash: '#1e3a8aee', update: '#1d4ed8ee', mail: '#7e22ceee' };
 const REPAIR_SECONDS = 3;
 const CRASH_TINT = 0x7aa2f7; // blue-screen blue
 const UPDATE_COLOR = 0x60a5fa;
@@ -52,6 +53,7 @@ export class HustleStation {
     this.switchedOff = false; // switched off for the neighbor
     this.group = group; // which security questions it asks ('helpdesk' | 'web' | 'ai')
     this.awaiting = null; // a finished job waiting on your answer: { bonus }
+    this.mail = null; // an email waiting on this PC (set by Phishing): { left } or { reading: true }
     this.repairProgress = 0;
     this.screen = screen; // where the laptop screen is (for glow and steam)
     this.pilePos = pile; // where cash stacks up on the desk
@@ -345,9 +347,9 @@ export class HustleStation {
   }
 
   render(dt, { near, handsFull }) {
-    this.panel.setVisible(near || this.broken || this.switchedOff || (this.overheated && this.powered) || this.helperWorking || this.updateDue);
+    this.panel.setVisible(near || this.broken || this.switchedOff || (this.overheated && this.powered) || this.helperWorking || this.updateDue || Boolean(this.mail));
     // Job titles only when you're close, or for something that needs you.
-    this.title.setVisible(near || this.broken || this.switchedOff || Boolean(this.awaiting) || this.overheated || !this.powered || this.updateDue);
+    this.title.setVisible(near || this.broken || this.switchedOff || Boolean(this.awaiting) || this.overheated || !this.powered || this.updateDue || Boolean(this.mail));
     const installing = this.updateDue && this.installProgress > 0;
     let bar = this.progress;
     if (this.broken) bar = this.repairProgress;
@@ -384,6 +386,11 @@ export class HustleStation {
     } else if (!this.powered) {
       text = 'No power: reset the breaker';
       bg = STATUS_COLORS.hot;
+    } else if (this.mail) {
+      if (this.mail.reading) text = 'Reading email…';
+      else if (!near) text = `EMAIL · ${Math.ceil(this.mail.left)}s`;
+      else text = 'New email: stand still to read it';
+      bg = STATUS_COLORS.mail;
     } else if (this.updateDue) {
       const pct = `-${Math.round((1 - UPDATES.outdatedPay) * 100)}% pay`;
       if (!near) text = this.outdated ? `OUTDATED (${pct})` : 'UPDATE';

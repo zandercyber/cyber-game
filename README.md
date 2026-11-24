@@ -16,6 +16,8 @@ Power is the limit. Every machine draws watts, including the laptop (60 W). Go o
 
 **Repairs:** servers (the server rack, and the GPU rig) sometimes **crash** when they finish a job, more often when they're running hot: stand at a crashed server for 3 seconds to reboot it. PCs (the laptops and the workstation) get an **update** every few minutes: stand at the machine for 3 seconds to install it. Ignore it for a minute and the machine is **outdated** and pays 25% less until you update it. Agents never fix anything: that's your job.
 
+**Phishing:** every few minutes an email lands on one of your PCs (an envelope over the machine and a countdown). Walk up to read it: you see the sender, any reply-to address, the subject, and where the link goes or what's attached. Pick the best of three responses. About two thirds are phishing: fall for one (or leave it too long and someone clicks it) and the attacker steals 20% of your stashed cash. The rest are real emails, like a bug bounty payout or a refund, and they pay if you handle them right. So reporting everything doesn't work: read the details. Agents never read email (Augustus will happily click a link, though).
+
 **Fans:** buy a box fan in the shop's **Room** tab and walk the box up to a machine to clip it on (one fan per machine, $100). That machine heats up 40% slower and cools down 50% faster, but it's a little louder while you work it (+1 noise) and the fan draws 20 W. The shop is a green hacker terminal that powers on like an old CRT when you walk up to the laptop, with **machines**, **room** (power, foam panels, fans), **agents** and **you** tabs.
 
 **Security checks:** about 1 in 5 jobs you finish yourself pops up a cybersecurity question that matches the machine (help desk, web bugs, or AI security). Right answer: double pay. Wrong or too slow (15 s): the job fails. Every answer shows a one-line explanation, and you won't see a repeat until you've seen the whole set.
@@ -52,7 +54,7 @@ npm run dev      # dev server with live reload
 npm run build    # production build into dist/
 ```
 
-Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **L** the neighbor comes over now, **Q** a security question on every job, **T** skip ahead 2 hours on the clock, **F** put up the next level of foam panels now, **C** crash a server now, **V** an update on every PC now, **K** a fan on every machine now.
+Add `?debug` (or `#debug`) to the URL to see the walkable floor (green), blocked areas (red), interaction spots (yellow) and the player's feet (yellow dot). Debug keys: **B** fill empty plots, **R** clear plots, **M** +$100, **P** next power supply, **U** unlock the shop, **D** deliver all orders now, **G** hire an Augustus now, **N** hire a Nero now, **X** Nero goes rogue now, **L** the neighbor comes over now, **Q** a security question on every job, **T** skip ahead 2 hours on the clock, **F** put up the next level of foam panels now, **C** crash a server now, **V** an update on every PC now, **E** a phishing email on a PC now, **K** a fan on every machine now.
 
 ## Project structure
 

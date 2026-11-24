@@ -145,6 +145,19 @@ export class UIScene extends Phaser.Scene {
     const neighborEvents = { 'night-start': onNight, 'night-end': onMorning, 'neighbor-warning': onWarn, 'neighbor-coming': onComing, 'neighbor-complaint': onComplaint, 'neighbor-satisfied': onSatisfied, 'neighbor-left': onLeft };
     for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.on(name, fn);
     this.events.once('shutdown', () => { for (const [name, fn] of Object.entries(neighborEvents)) this.dorm.events.off(name, fn); });
+    // Phishing: an email lands on a PC; its card uses the question card; banners when nobody read it in time.
+    const MAIL = 0xc084fc;
+    const onPhishOpen = (card) => {
+      this.banner?.destroy(); // the "new email" banner would cover the email
+      this.questionPanel.show({ ...card, onAnswer: (pick) => this.dorm.answerPhish(pick) });
+    };
+    const onPhishArrived = () => this.showBanner('New email!', `Something landed on your ${this.dorm.phishing.machineName}. Walk up and read it before someone clicks: phishing steals cash, real emails can pay.`, MAIL);
+    const onPhishClicked = ({ name, who, taken }) => this.showBanner(taken > 0 ? `Phished! -$${taken}` : 'Phished!',
+      `${who ? `${who} clicked the link` : 'Nobody read it in time and the link got clicked'} on the ${name}.${taken > 0 ? '' : ' Lucky your stash was empty.'} Read new emails sooner.`, RED);
+    const onPhishExpired = ({ name, pays, amount }) => this.showBanner('Missed a real email', `The email on the ${name} was a real ${pays.toLowerCase()} worth $${amount}. It expired.`, MAIL);
+    const phishEvents = { 'phish-open': onPhishOpen, 'phish-arrived': onPhishArrived, 'phish-clicked': onPhishClicked, 'phish-expired': onPhishExpired };
+    for (const [name, fn] of Object.entries(phishEvents)) this.dorm.events.on(name, fn);
+    this.events.once('shutdown', () => { for (const [name, fn] of Object.entries(phishEvents)) this.dorm.events.off(name, fn); });
     this.dorm.events.on('agent-rogue', onRogue);
     this.dorm.events.on('agent-contained', onContained);
     this.dorm.events.on('agent-arrived', onArrive);
@@ -184,6 +197,7 @@ export class UIScene extends Phaser.Scene {
     const rogue = this.dorm.agents.find((a) => a.state === 'rogue');
     const neighbor = this.dorm.neighbor;
     const sleeper = this.dorm.agents.find((ag) => ag.waitingToWake);
+    const phish = this.dorm.phishing;
     const crashed = this.dorm.crashedStations;
     const updates = this.dorm.pendingUpdates;
     const outdated = updates.filter((st) => st.hustle.outdated);
@@ -192,6 +206,7 @@ export class UIScene extends Phaser.Scene {
     if (neighbor.state === 'coming') text = stillOn ? `Switch machines off! ${stillOn} still on · ${Math.ceil(neighbor.timer)}s` : `All off. Neighbor in ${Math.ceil(neighbor.timer)}s`;
     else if (neighbor.state === 'visiting') text = 'Neighbor at the window: stay quiet';
     else if (rogue) text = `${rogue.name} went rogue: catch him!`;
+    else if (phish?.station && !phish.open) text = `Email on the ${phish.machineName}: read it · ${Math.ceil(Math.max(0, phish.left))}s`;
     else if (friedCount && !gameState.tripped) text = friedCount === 1 ? '1 machine fried: stand at it to repair' : `${friedCount} machines fried: repair them`;
     else if (crashed.length && !gameState.tripped) text = crashed.length === 1 ? `${nameOf(crashed[0])} crashed: stand at it to reboot` : `${crashed.length} servers crashed: reboot them`;
     else if (sleeper) text = `${sleeper.name} is asleep: walk up to wake him`;
