@@ -8,8 +8,11 @@
 //   real email, anything else -> you miss the money
 // Nobody reads it in time: someone clicks it (phishing steals cash; a real one expires).
 // The countdown pauses while the machine is off, unpowered or broken. Agents never read email.
+// Security tools (src/data/security.js) help: the email filter stops some phishing before it
+// lands, MFA cuts what a phish steals, and training gives you more time.
 
 import { PHISHING, EMAILS, nextEmailIn } from '../data/phishing.js';
+import { SECURITY_UPGRADES, noSecurityLevels } from '../data/security.js';
 import { gameState } from '../state/GameState.js';
 
 const ICON = 'icon-mail';
@@ -24,9 +27,25 @@ export class Phishing {
     this.open = false; // its card is on screen
     this.card = null;
     this.seen = []; // emails shown already (no repeats until you've seen them all)
+    this.filtered = 0; // phishing emails your filter stopped (shown in the shop)
+    this.saved = 0; // cash MFA kept from attackers
 
     if (!scene.textures.exists(ICON)) makeIcon(scene);
     this.icon = scene.add.image(0, 0, ICON).setDepth(12550).setVisible(false);
+  }
+
+  get levels() {
+    return this.scene.securityLevels ?? noSecurityLevels();
+  }
+
+  /** Time to walk up to a new email (longer with training). */
+  get reachSeconds() {
+    return PHISHING.reachSeconds + SECURITY_UPGRADES.training.reach * this.levels.training;
+  }
+
+  /** Time to answer once it's open (longer with training). */
+  get answerSeconds() {
+    return PHISHING.answerSeconds + SECURITY_UPGRADES.training.answer * this.levels.training;
   }
 
   /** PCs that can get email. */
@@ -42,7 +61,7 @@ export class Phishing {
       const ready = this.targets.filter((st) => st.hustle.powered && !st.hustle.switchedOff && !st.hustle.broken);
       if (!ready.length) return;
       this.nextIn -= dt;
-      if (this.nextIn <= 0) this.start(ready[Math.floor(Math.random() * ready.length)]);
+      if (this.nextIn <= 0) this.arrive(ready[Math.floor(Math.random() * ready.length)]);
       return;
     }
     if (this.open) return; // the card has its own timer
@@ -58,8 +77,21 @@ export class Phishing {
     else if (at === this.station && !s.question) this.openCard();
   }
 
-  /** An email lands on a machine now. quiet: no banner (loading a save). */
-  start(station, index = this.pick(), { left = PHISHING.reachSeconds, quiet = false } = {}) {
+  /** The next email is due: the filter may stop it (phishing only); otherwise it lands on the machine. */
+  arrive(station) {
+    const index = this.pick();
+    const e = EMAILS[index];
+    if (e.phish && Math.random() < SECURITY_UPGRADES.filter.catches[this.levels.filter]) {
+      this.filtered += 1;
+      this.nextIn = nextEmailIn();
+      this.scene.events.emit('phish-filtered', { subject: e.subject, from: e.from });
+      return;
+    }
+    this.start(station, index);
+  }
+
+  /** An email lands on a machine now (no filter: debug key E and tests use this). quiet: no banner (loading a save). */
+  start(station, index = this.pick(), { left = this.reachSeconds, quiet = false } = {}) {
     this.station = station;
     this.email = index;
     this.left = left;
@@ -95,7 +127,7 @@ export class Phishing {
     this.card = {
       title: `New email · ${this.machineName}`,
       rule: 'Phishing steals cash. Real emails can pay. Pick the best response.',
-      seconds: PHISHING.answerSeconds,
+      seconds: this.answerSeconds,
       width: 820,
       email: { from: e.from, replyTo: e.replyTo, subject: e.subject, body: e.body, link: e.link, attach: e.attach },
       q: 'What do you do?',
@@ -115,9 +147,10 @@ export class Phishing {
     if (e.phish) {
       if (correct) text = 'Phishing stopped! Nothing stolen';
       else {
-        const taken = this.steal();
+        const { taken, blocked } = this.steal();
         const lead = pick === null ? 'Too slow: phished!' : 'Phished!';
         text = taken > 0 ? `${lead} The attacker took $${taken}` : `${lead} Lucky your stash was empty`;
+        if (blocked > 0) text += ` (MFA stopped $${blocked})`;
       }
     } else if (correct) {
       const amount = this.reward();
@@ -135,15 +168,17 @@ export class Phishing {
     const e = EMAILS[this.email];
     const name = this.machineName;
     const agent = this.scene.agents.find((a) => a.workingStation === this.station);
-    if (e.phish) this.scene.events.emit('phish-clicked', { name, who: agent?.name ?? null, taken: this.steal() });
+    if (e.phish) this.scene.events.emit('phish-clicked', { name, who: agent?.name ?? null, ...this.steal() });
     else this.scene.events.emit('phish-expired', { name, pays: e.pays, amount: this.reward() });
     this.clear();
   }
 
-  /** The attacker takes a share of your stashed cash. Returns what was taken. */
+  /** The attacker goes for a share of your stashed cash; MFA blocks part of it. Returns { taken, blocked }. */
   steal() {
-    const want = Math.max(PHISHING.stealMin, Math.round(gameState.cash * PHISHING.stealShare));
-    return gameState.charge(want);
+    const want = Math.min(gameState.cash, Math.max(PHISHING.stealMin, Math.round(gameState.cash * PHISHING.stealShare)));
+    const blocked = Math.round(want * SECURITY_UPGRADES.mfa.cuts[this.levels.mfa]);
+    this.saved += blocked;
+    return { taken: gameState.charge(want - blocked), blocked };
   }
 
   /** What a real email pays: about 20 s of your best machine's pay. */
@@ -177,6 +212,8 @@ export class Phishing {
       email: this.email,
       left: Math.ceil(this.left),
       seen: [...this.seen],
+      filtered: this.filtered,
+      saved: this.saved,
     };
   }
 
@@ -185,6 +222,8 @@ export class Phishing {
     if (!state) return;
     this.seen = [...state.seen];
     this.nextIn = state.nextIn;
+    this.filtered = state.filtered;
+    this.saved = state.saved;
     const station = this.targets.find((st) => st.plotId === state.plotId);
     if (station && state.email !== null) {
       this.start(station, state.email, { left: Math.max(state.left, 15), quiet: true });

@@ -12,6 +12,7 @@ import { PLAYER_MAX_LEVEL, PLAYER_UPGRADE_IDS } from '../data/playerUpgrades.js'
 import { CLOCK, MINUTES_PER_DAY } from '../data/clock.js';
 import { UPDATES } from '../data/maintenance.js';
 import { PHISHING, EMAILS } from '../data/phishing.js';
+import { SECURITY_UPGRADES, SECURITY_UPGRADE_IDS, securityMax } from '../data/security.js';
 
 const KEY = 'cyber-game-save';
 const VERSION = 1;
@@ -180,9 +181,15 @@ export function readSave({ plotIds, pileMax }) {
     nextIn: num(p.nextIn, 0, Math.max(PHISHING.firstAfter, PHISHING.every[1]), PHISHING.firstAfter),
     plotId: typeof p.plotId === 'string' && plotIds.includes(p.plotId) ? p.plotId : null,
     email: Number.isInteger(p.email) && p.email >= 0 && p.email < EMAILS.length ? p.email : null,
-    left: num(p.left, 0, PHISHING.reachSeconds),
+    left: num(p.left, 0, PHISHING.reachSeconds + SECURITY_UPGRADES.training.reach * securityMax('training')),
     seen: [...new Set((Array.isArray(p.seen) ? p.seen : []).filter((i) => Number.isInteger(i) && i >= 0 && i < EMAILS.length))],
+    filtered: int(p.filtered, 0, 100000),
+    saved: int(p.saved, 0, MAX_CASH),
   } : null;
+
+  // Security tools you bought (older saves have none).
+  const rawSecurity = obj(raw.securityLevels);
+  const securityLevels = Object.fromEntries(SECURITY_UPGRADE_IDS.map((k) => [k, int(rawSecurity[k], 0, securityMax(k))]));
 
   const desk = raw.desk && typeof raw.desk === 'object' ? raw.desk : {};
   const player = raw.player && typeof raw.player === 'object' ? raw.player : {};
@@ -203,6 +210,7 @@ export function readSave({ plotIds, pileMax }) {
     agentLevels,
     questionsSeen,
     playerLevels,
+    securityLevels,
     neighbor,
     clock,
     foamLevel,

@@ -4,6 +4,7 @@ import { ITEMS, POWER_ITEMS, POWER_TIERS, FOAM_ITEMS, FOAM_QUIET_PER_LEVEL, FAN,
 import { AGENT_TYPES, MAX_AGENTS } from '../data/agents.js';
 import { NEIGHBOR, noiseLevel } from '../data/neighbor.js';
 import { PLAYER_UPGRADES } from '../data/playerUpgrades.js';
+import { SECURITY_UPGRADES } from '../data/security.js';
 import { gameState } from '../state/GameState.js';
 import { clearSave } from '../state/save.js';
 import { ShopPanel } from '../ui/ShopPanel.js';
@@ -88,6 +89,8 @@ export class UIScene extends Phaser.Scene {
       onAgentUpgrade: (type, kind) => this.dorm.buyAgentUpgrade(type, kind),
       getPlayerLevels: () => this.dorm.playerLevels,
       onPlayerUpgrade: (kind) => this.dorm.buyPlayerUpgrade(kind),
+      getSecurity: () => ({ levels: this.dorm.securityLevels, filtered: this.dorm.phishing.filtered, saved: this.dorm.phishing.saved }),
+      onSecurityUpgrade: (kind) => this.dorm.buySecurityUpgrade(kind),
     });
     this.shop.setVisible(this.dorm.shopOpen);
     const onShop = (open) => this.shop.setVisible(open);
@@ -152,10 +155,17 @@ export class UIScene extends Phaser.Scene {
       this.questionPanel.show({ ...card, onAnswer: (pick) => this.dorm.answerPhish(pick) });
     };
     const onPhishArrived = () => this.showBanner('New email!', `Something landed on your ${this.dorm.phishing.machineName}. Walk up and read it before someone clicks: phishing steals cash, real emails can pay.`, MAIL);
-    const onPhishClicked = ({ name, who, taken }) => this.showBanner(taken > 0 ? `Phished! -$${taken}` : 'Phished!',
-      `${who ? `${who} clicked the link` : 'Nobody read it in time and the link got clicked'} on the ${name}.${taken > 0 ? '' : ' Lucky your stash was empty.'} Read new emails sooner.`, RED);
+    const onPhishClicked = ({ name, who, taken, blocked }) => this.showBanner(taken > 0 ? `Phished! -$${taken}` : 'Phished!',
+      `${who ? `${who} clicked the link` : 'Nobody read it in time and the link got clicked'} on the ${name}.${taken > 0 ? '' : ' Lucky your stash was empty.'}${blocked > 0 ? ` MFA stopped $${blocked}.` : ''} Read new emails sooner.`, RED);
+    const onPhishFiltered = ({ subject, from }) => this.showBanner('Email filter caught one',
+      `Phishing stopped before it landed: "${subject}" from ${from.replace(/.*@|>/g, '')}`, GREEN);
+    const onSecurity = (kind, level) => this.showBanner(level > 1 ? `${SECURITY_UPGRADES[kind].name} upgraded!` : `${SECURITY_UPGRADES[kind].name} installed!`,
+      `${SECURITY_UPGRADES[kind].describe(level)}.`, 0x5ff0ff);
     const onPhishExpired = ({ name, pays, amount }) => this.showBanner('Missed a real email', `The email on the ${name} was a real ${pays.toLowerCase()} worth $${amount}. It expired.`, MAIL);
-    const phishEvents = { 'phish-open': onPhishOpen, 'phish-arrived': onPhishArrived, 'phish-clicked': onPhishClicked, 'phish-expired': onPhishExpired };
+    const phishEvents = {
+      'phish-open': onPhishOpen, 'phish-arrived': onPhishArrived, 'phish-clicked': onPhishClicked, 'phish-expired': onPhishExpired,
+      'phish-filtered': onPhishFiltered, 'security-upgraded': onSecurity,
+    };
     for (const [name, fn] of Object.entries(phishEvents)) this.dorm.events.on(name, fn);
     this.events.once('shutdown', () => { for (const [name, fn] of Object.entries(phishEvents)) this.dorm.events.off(name, fn); });
     this.dorm.events.on('agent-rogue', onRogue);
